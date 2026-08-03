@@ -98,22 +98,11 @@ def serialize_subscription(
                 "is_active": plan.is_active,
                 "sort_order": plan.sort_order,
             }
-    # Custom orders have no plan — expose purchased title as plan.name for UI.
-    if title and plan_data is None:
-        plan_data = {
-            "id": None,
-            "slug": "custom",
-            "name": title,
-            "group_name": "свой",
-            "duration_days": None,
-            "traffic_gb": sub.traffic_limit_gb,
-            "device_limit": sub.device_limit,
-            "price_rub": None,
-            "is_active": True,
-            "sort_order": 0,
-        }
-    elif title and plan_data is not None:
-        # Prefer explicit purchased title when present (e.g. after catalog rename).
+    display_title = title
+    if not display_title and plan_data:
+        display_title = plan_data.get("name")
+    # If order title exists and a stale plan is still linked, prefer order title in plan card.
+    if title and plan_data is not None:
         plan_data = {**plan_data, "name": title}
     data = {
         "id": str(sub.id),
@@ -124,7 +113,7 @@ def serialize_subscription(
         "traffic_used_gb": str(sub.traffic_used_gb),
         "device_limit": sub.device_limit,
         "devices_used": devices_used if devices_used is not None else 0,
-        "title": title or (plan_data.get("name") if plan_data else None),
+        "title": display_title,
         "sub_url": sub_url,
         "happ_deep_link": build_happ_deep_link(sub_url),
         "happ_open_url": build_happ_open_url(sub.sub_token, settings),

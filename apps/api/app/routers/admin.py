@@ -38,7 +38,6 @@ from app.schemas import (
     AdminPlanIn,
     AdminPlanPatchIn,
     AdminPromoIn,
-    AdminProxyGrantIn,
     AdminWebLoginIn,
     PlanOut,
     StatsOut,
@@ -52,14 +51,7 @@ from app.services.provisioning import (
     serialize_subscription,
     update_subscription_limits,
 )
-from app.services.proxy import (
-    count_active_proxy_users,
-    get_proxy_access,
-    grant_or_extend_proxy,
-    proxy_configured,
-    revoke_proxy_access,
-    serialize_proxy_access,
-)
+from app.services.proxy import get_proxy_access, serialize_proxy_access
 from app.services.telegram_notify import send_telegram_message
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -453,87 +445,6 @@ async def revoke_user(
         "ok": True,
         "status": sub.status.value,
         "telegram_id": telegram_id,
-        "notified": False,
-    }
-
-
-@router.get("/proxy/info")
-async def proxy_info(
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    _: None = Depends(require_admin_api),
-) -> dict:
-    from app.services.proxy import mtproto_configured, proxy_mode, socks_configured
-
-    configured = proxy_configured(settings)
-    mode = proxy_mode(settings)
-    payload: dict = {
-        "configured": configured,
-        "enabled": configured,
-        "type": mode,
-        "active_users": await count_active_proxy_users(db),
-    }
-    if mode == "socks5" and socks_configured(settings):
-        payload.update({"host": settings.socks5_host, "port": str(settings.socks5_port)})
-    elif mode == "mtproto" and mtproto_configured(settings):
-        payload.update(
-            {
-                "host": settings.mtproto_host,
-                "port": str(settings.mtproto_port),
-                "secret_preview": f"{settings.mtproto_secret[:10]}…",
-            }
-        )
-    return payload
-
-
-@router.post("/users/{telegram_id}/proxy/grant")
-async def grant_proxy_user(
-    telegram_id: int,
-    body: AdminProxyGrantIn,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    _: None = Depends(require_admin_api),
-) -> dict:
-    """Silent SOCKS5 proxy grant/extend — no Telegram notify."""
-    if not proxy_configured(settings):
-        raise HTTPException(status_code=503, detail="Proxy is not configured on server")
-    user = await get_or_create_telegram_user(
-        db, telegram_id, username=body.username, settings=settings
-    )
-    await db.commit()
-    access = await grant_or_extend_proxy(
-        db, user=user, days=body.days, stack=body.stack
-    )
-    await db.commit()
-    await db.refresh(access)
-    return {
-        "ok": True,
-        "proxy": serialize_proxy_access(access, settings),
-        "ends_at": access.ends_at.isoformat(),
-        "notified": False,
-    }
-
-
-@router.post("/users/{telegram_id}/proxy/revoke")
-async def revoke_proxy_user(
-    telegram_id: int,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    _: None = Depends(require_admin_api),
-) -> dict:
-    """Silent SOCKS5 proxy revoke (removes login from 3proxy)."""
-    result = await db.execute(select(User).where(User.telegram_id == telegram_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    access = await revoke_proxy_access(db, user=user)
-    if not access:
-        raise HTTPException(status_code=404, detail="No proxy access")
-    await db.commit()
-    return {
-        "ok": True,
-        "proxy": serialize_proxy_access(access, settings, include_credentials=False),
-        "status": access.status.value,
         "notified": False,
     }
 

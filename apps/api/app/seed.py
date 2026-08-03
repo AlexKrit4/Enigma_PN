@@ -73,17 +73,6 @@ PLANS = [
         "price_rub": "800.00",
         "sort_order": 60,
     },
-    # Прокси для Telegram (MTProto FakeTLS / SOCKS5 — что включено на сервере)
-    {
-        "slug": "proxy-1m",
-        "name": "Прокси Telegram — 1 месяц",
-        "group_name": "прокси",
-        "duration_days": 30,
-        "traffic_gb": None,
-        "device_limit": 1,
-        "price_rub": "70.00",
-        "sort_order": 70,
-    },
 ]
 
 ACTIVE_SLUGS = {p["slug"] for p in PLANS}

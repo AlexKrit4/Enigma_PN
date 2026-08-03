@@ -81,12 +81,6 @@ class UserOut(BaseModel):
     proxy: ProxyOut | None = None
 
 
-class AdminProxyGrantIn(BaseModel):
-    days: int = Field(gt=0, le=3650)
-    username: str | None = None
-    stack: bool = True
-
-
 class TelegramAuthIn(BaseModel):
     telegram_id: int
     username: str | None = None

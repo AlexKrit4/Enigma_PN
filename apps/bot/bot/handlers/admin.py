@@ -15,7 +15,6 @@ from bot.keyboards.admin import (
     admin_back_keyboard,
     admin_cancel_keyboard,
     admin_menu_keyboard,
-    proxy_admin_keyboard,
     broadcast_audience_keyboard,
     confirm_action_keyboard,
     days_keyboard,
@@ -50,8 +49,6 @@ class AdminFSM(StatesGroup):
     wait_plan_name = State()
     wait_plan_price = State()
     wait_plan_days = State()
-    wait_proxy_id = State()
-    wait_proxy_days_custom = State()
 
 
 def _is_admin(telegram_id: int) -> bool:
@@ -107,20 +104,6 @@ def _fmt_user_payload(payload: dict) -> str:
         )
     else:
         lines.append("\nПодписка: нет")
-
-    proxy = user.get("proxy")
-    if proxy:
-        lines.extend(
-            [
-                "",
-                "🔌 <b>Прокси</b>",
-                f"Статус: <b>{html.escape(str(proxy.get('status')))}</b>",
-                f"До: <b>{html.escape(str(proxy.get('ends_at') or '—'))}</b>",
-                f"Активен: {'да' if proxy.get('active') else 'нет'}",
-            ]
-        )
-    else:
-        lines.append("\nПрокси: нет")
 
     if vpn:
         lines.extend(
@@ -1079,181 +1062,6 @@ async def fsm_confirm_label(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.callback_query(F.data == "adm:proxy")
-async def cb_proxy_menu(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    await state.clear()
-    assert callback.message
-    try:
-        info = await api.admin_proxy_info()
-    except Exception as exc:
-        info = {"configured": False, "error": str(exc)}
-    cfg = "да" if info.get("configured") else "нет"
-    mode = html.escape(str(info.get("type") or "—"))
-    text = (
-        f"🔌 <b>Прокси</b> (<code>{mode}</code>)\n\n"
-        f"На сервере настроен: <b>{cfg}</b>\n"
-        f"Host: <code>{html.escape(str(info.get('host') or '—'))}</code>\n"
-        f"Port: <code>{html.escape(str(info.get('port') or '—'))}</code>\n"
-        f"Активных: <b>{html.escape(str(info.get('active_users', '—')))}</b>\n\n"
-        "Выдача/продление/отключение — <b>без уведомления</b> пользователю."
-    )
-    await callback.message.edit_text(text, reply_markup=proxy_admin_keyboard())
-    await callback.answer()
-
-
-async def _start_proxy_grant(message: Message, state: FSMContext, *, stack: bool) -> None:
-    await state.update_data(proxy_stack=stack, action="proxy_grant")
-    await state.set_state(AdminFSM.wait_proxy_id)
-    mode = "продлить/наложить срок" if stack else "выдать с чистого срока"
-    await message.answer(
-        f"🔌 Прокси ({mode}).\nВведите Telegram ID или @username:",
-        reply_markup=admin_cancel_keyboard(),
-    )
-
-
-@router.callback_query(F.data == "adm:proxy_grant")
-async def cb_proxy_grant(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    assert callback.message
-    await _start_proxy_grant(callback.message, state, stack=False)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "adm:proxy_extend")
-async def cb_proxy_extend(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    assert callback.message
-    await _start_proxy_grant(callback.message, state, stack=True)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "adm:proxy_revoke")
-async def cb_proxy_revoke_start(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    await state.update_data(action="proxy_revoke")
-    await state.set_state(AdminFSM.wait_proxy_id)
-    assert callback.message
-    await callback.message.answer(
-        "🚫 Отключить прокси. Введите Telegram ID или @username:",
-        reply_markup=admin_cancel_keyboard(),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("adm:u_proxy_grant:"))
-async def cb_u_proxy_grant(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    assert callback.data and callback.message
-    tid = int(callback.data.rsplit(":", 1)[-1])
-    await state.update_data(tg_id=tid, proxy_stack=True, action="proxy_grant")
-    await state.set_state(None)
-    await callback.message.answer(
-        f"🔌 Выдать/продлить прокси для <code>{tid}</code>. Сколько дней?",
-        reply_markup=days_keyboard("proxy_days"),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("adm:u_proxy_revoke:"))
-async def cb_u_proxy_revoke(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    assert callback.data and callback.message
-    tid = int(callback.data.rsplit(":", 1)[-1])
-    await state.update_data(tg_id=tid, action="proxy_revoke")
-    await state.set_state(None)
-    await callback.message.answer(
-        f"Отключить прокси у <code>{tid}</code> без уведа?",
-        reply_markup=confirm_action_keyboard("proxy_revoke"),
-    )
-    await callback.answer()
-
-
-@router.message(AdminFSM.wait_proxy_id)
-async def fsm_proxy_id(message: Message, state: FSMContext) -> None:
-    if _admin_denied(message.from_user):
-        return
-    raw = (message.text or "").strip()
-    if not raw:
-        await message.answer("Введите ID/@user:", reply_markup=admin_cancel_keyboard())
-        return
-    try:
-        payload = await api.admin_lookup(raw)
-        user = payload.get("user") or payload
-        tid = int(user["telegram_id"])
-    except Exception:
-        # allow bare numeric id even if user not found yet (grant will create)
-        if raw.isdigit():
-            tid = int(raw)
-        else:
-            await message.answer("Не найден. Введите Telegram ID числом.", reply_markup=admin_cancel_keyboard())
-            return
-    data = await state.get_data()
-    await state.update_data(tg_id=tid)
-    if data.get("action") == "proxy_revoke":
-        await state.set_state(None)
-        await message.answer(
-            f"Отключить прокси у <code>{tid}</code> без уведа?",
-            reply_markup=confirm_action_keyboard("proxy_revoke"),
-        )
-        return
-    await state.set_state(None)
-    await message.answer(
-        f"🔌 Прокси для <code>{tid}</code>. Сколько дней?",
-        reply_markup=days_keyboard("proxy_days"),
-    )
-
-
-@router.callback_query(F.data.startswith("adm:proxy_days:"))
-async def cb_proxy_days(callback: CallbackQuery, state: FSMContext) -> None:
-    if _admin_denied(callback.from_user):
-        await callback.answer("Нет доступа", show_alert=True)
-        return
-    assert callback.data and callback.message
-    value = callback.data.rsplit(":", 1)[-1]
-    if value == "custom":
-        await state.set_state(AdminFSM.wait_proxy_days_custom)
-        await callback.message.answer("Введите число дней:", reply_markup=admin_cancel_keyboard())
-        await callback.answer()
-        return
-    await state.update_data(days=int(value))
-    data = await state.get_data()
-    await callback.message.answer(
-        f"Выдать прокси <code>{data.get('tg_id')}</code> на <b>{value}</b> дн. без уведа?",
-        reply_markup=confirm_action_keyboard("proxy_grant"),
-    )
-    await callback.answer()
-
-
-@router.message(AdminFSM.wait_proxy_days_custom)
-async def fsm_proxy_days_custom(message: Message, state: FSMContext) -> None:
-    if _admin_denied(message.from_user):
-        return
-    raw = (message.text or "").strip()
-    if not raw.isdigit() or int(raw) < 1:
-        await message.answer("Нужно целое число ≥ 1", reply_markup=admin_cancel_keyboard())
-        return
-    await state.update_data(days=int(raw))
-    data = await state.get_data()
-    await state.set_state(None)
-    await message.answer(
-        f"Выдать прокси <code>{data.get('tg_id')}</code> на <b>{raw}</b> дн. без уведа?",
-        reply_markup=confirm_action_keyboard("proxy_grant"),
-    )
-
-
 @router.callback_query(F.data.startswith("adm:do:"))
 async def cb_do_action(callback: CallbackQuery, state: FSMContext) -> None:
     if _admin_denied(callback.from_user):
@@ -1307,36 +1115,6 @@ async def cb_do_action(callback: CallbackQuery, state: FSMContext) -> None:
                 f"Аудитория: {html.escape(str(result.get('audience')))}\n"
                 f"Целей: {result.get('targets')} · отправлено: {result.get('sent')} · ошибок: {result.get('failed')}\n"
                 f"Кто: {_who(callback.from_user)}"
-            )
-        elif action == "proxy_grant":
-            result = await api.admin_proxy_grant(
-                int(data["tg_id"]),
-                int(data["days"]),
-                stack=bool(data.get("proxy_stack", True)),
-            )
-            proxy = result.get("proxy") or {}
-            mode = html.escape(str(proxy.get("mode") or ""))
-            creds = ""
-            if proxy.get("username"):
-                creds = (
-                    f"Login: <code>{html.escape(str(proxy.get('username') or ''))}</code>\n"
-                    f"Pass: <code>{html.escape(str(proxy.get('password') or ''))}</code>\n"
-                )
-            elif proxy.get("secret"):
-                secret = str(proxy.get("secret") or "")
-                creds = f"Secret: <code>{html.escape(secret[:16])}…</code>\n"
-            text = (
-                f"✅ Прокси ({mode}) до <b>{html.escape(str(result.get('ends_at')))}</b>\n"
-                f"Host: <code>{html.escape(str(proxy.get('host') or ''))}</code>\n"
-                f"Port: <code>{html.escape(str(proxy.get('port') or ''))}</code>\n"
-                f"{creds}"
-                f"Увед юзеру: нет\nКто: {_who(callback.from_user)}"
-            )
-        elif action == "proxy_revoke":
-            result = await api.admin_proxy_revoke(int(data["tg_id"]))
-            text = (
-                f"🚫 Прокси отключён ({html.escape(str(result.get('status')))})\n"
-                f"Увед юзеру: нет\nКто: {_who(callback.from_user)}"
             )
         else:
             text = "Неизвестное действие"

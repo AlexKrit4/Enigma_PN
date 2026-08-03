@@ -17,12 +17,10 @@ from bot.keyboards.common import (
     custom_devices_keyboard,
     custom_gb_keyboard,
     devices_keyboard,
-    format_proxy_card,
     format_subscription_card,
     main_menu,
     pay_keyboard,
     plans_keyboard,
-    proxy_keyboard,
     subscription_keyboard,
     tariff_type_keyboard,
 )
@@ -37,14 +35,13 @@ class BuyFSM(StatesGroup):
     wait_custom_devices = State()
 
 
-def _sub_keyboard(sub: dict | None, proxy: dict | None = None):
-    if not sub and not (proxy and proxy.get("active")):
+def _sub_keyboard(sub: dict | None):
+    if not sub:
         return None
     return subscription_keyboard(
-        (sub or {}).get("sub_url") or "",
-        (sub or {}).get("happ_open_url") or "",
-        show_devices=bool(sub),
-        proxy=proxy,
+        sub.get("sub_url") or "",
+        sub.get("happ_open_url") or "",
+        show_devices=True,
     )
 
 
@@ -77,20 +74,10 @@ def _tariff_home_text() -> str:
         "<b>Ограниченный</b> — пакет ГБ на месяц, 3 устройства. "
         "Отключается, когда кончится трафик или срок.\n\n"
         "<b>Вечный</b> — без лимита трафика, только срок. 3 устройства.\n\n"
-        "<b>Прокси Telegram</b> — SOCKS5 только для Telegram, "
-        "личный логин на ваш аккаунт в боте. 70 ₽ / 30 дней.\n\n"
         "<b>Свой тариф</b> — сами выбираете ГБ, дни и устройства.\n"
         "Цена: 2 ₽/ГБ + 1 ₽/день + 25 ₽/устройство.\n"
         "Вечный трафик в своём тарифе недоступен."
     )
-
-
-async def _proxy_plan_id() -> str | None:
-    plans = await _plans_by_group("прокси")
-    if not plans:
-        return None
-    plans = sorted(plans, key=lambda p: int(p.get("sort_order") or 0))
-    return str(plans[0]["id"])
 
 
 def _format_custom_quote(q: dict) -> str:
@@ -117,7 +104,6 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     assert user
     data = await api.auth(user.id, user.username)
     sub = data.get("user", {}).get("subscription")
-    proxy = data.get("user", {}).get("proxy")
     intro = (
         f"Привет! Это <b>{settings.brand_name}</b> — VPN для Happ.\n\n"
         f"Сайт: https://{settings.domain}\n"
@@ -133,10 +119,10 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             trial_note = "Пробный период уже использован или недоступен.\n\n"
 
     text = intro + "\n" + trial_note + format_subscription_card(
-        sub, brand=settings.brand_name, proxy=proxy
+        sub, brand=settings.brand_name
     )
     await message.answer(text, reply_markup=main_menu(), parse_mode="HTML")
-    kb = _sub_keyboard(sub, proxy)
+    kb = _sub_keyboard(sub)
     if kb:
         await message.answer(
             "Готово к подключению:",
@@ -186,44 +172,6 @@ async def cb_tarif_eternal(callback: CallbackQuery, state: FSMContext) -> None:
     )
     await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
     await callback.answer()
-
-
-@router.callback_query(F.data == "tarif:proxy")
-async def cb_tarif_proxy(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
-    assert callback.message
-    plans = await _plans_by_group("прокси")
-    text = (
-        "🔌 <b>Прокси для Telegram</b>\n\n"
-        "Встроенный прокси Telegram на многих сетях РФ "
-        "после ping блокируется (DPI).\n"
-        "Если так — используйте VPN в Happ.\n\n"
-        "Тариф: 70 ₽ / 30 дней, на аккаунт в боте."
-    )
-    await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
-    await callback.answer()
-
-
-@router.message(Command("proxy"))
-@router.message(F.text == "🔌 Прокси")
-async def cmd_proxy(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    user = message.from_user
-    assert user
-    data = await api.auth(user.id, user.username)
-    me = await api.me(data["access_token"])
-    proxy = me.get("proxy")
-    sub = me.get("subscription")
-    plan_id = await _proxy_plan_id()
-    await message.answer(
-        format_proxy_card(proxy),
-        reply_markup=proxy_keyboard(
-            proxy,
-            buy_plan_id=plan_id,
-            happ_open_url=(sub or {}).get("happ_open_url") or "",
-        ),
-        parse_mode="HTML",
-    )
 
 
 @router.callback_query(F.data == "tarif:custom")
@@ -458,11 +406,10 @@ async def cmd_mysub(message: Message, state: FSMContext) -> None:
     token = data["access_token"]
     me = await api.me(token)
     sub = me.get("subscription")
-    proxy = me.get("proxy")
     await message.answer(
-        format_subscription_card(sub, brand=settings.brand_name, proxy=proxy),
+        format_subscription_card(sub, brand=settings.brand_name),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub, proxy),
+        reply_markup=_sub_keyboard(sub),
     )
 
 
@@ -531,11 +478,10 @@ async def devices_back(callback: CallbackQuery) -> None:
     data = await api.auth(user.id, user.username)
     me = await api.me(data["access_token"])
     sub = me.get("subscription")
-    proxy = me.get("proxy")
     await callback.message.edit_text(  # type: ignore[union-attr]
-        format_subscription_card(sub, brand=settings.brand_name, proxy=proxy),
+        format_subscription_card(sub, brand=settings.brand_name),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub, proxy),
+        reply_markup=_sub_keyboard(sub),
     )
     await callback.answer()
 
@@ -550,8 +496,7 @@ async def cmd_help(message: Message, state: FSMContext) -> None:
         "2. В боте откройте «📱 Моя подписка»\n"
         "3. Нажмите «🚀 Открыть в Happ» — подписка добавится сама\n"
         "4. В Happ обновите подписку и включите сервер Finland\n\n"
-        "Тарифы: ограниченный / вечный / прокси Telegram / свой.\n"
-        "Прокси: раздел «🔌 Прокси» — SOCKS5 только для Telegram.\n"
+        "Тарифы: ограниченный / вечный / свой.\n"
         f"Сайт: https://{get_settings().domain}"
     )
     await message.answer(text)
@@ -574,7 +519,7 @@ async def forward_support(message: Message) -> None:
     settings = get_settings()
     if not settings.admin_telegram_ids:
         return
-    if message.text in {"🛒 Тарифы", "📱 Моя подписка", "🔌 Прокси", "❓ Помощь", "💬 Поддержка"}:
+    if message.text in {"🛒 Тарифы", "📱 Моя подписка", "❓ Помощь", "💬 Поддержка"}:
         return
     user = message.from_user
     assert user

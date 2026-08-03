@@ -10,7 +10,6 @@ type Tab =
   | "users"
   | "orders"
   | "actions"
-  | "proxy"
   | "broadcast"
   | "plans"
   | "promos";
@@ -21,7 +20,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "users", label: "Пользователи" },
   { id: "orders", label: "Оплаты" },
   { id: "actions", label: "Действия" },
-  { id: "proxy", label: "Прокси" },
   { id: "broadcast", label: "Рассылка" },
   { id: "plans", label: "Тарифы" },
   { id: "promos", label: "Промо" },
@@ -133,11 +131,6 @@ export default function AdminPage() {
   const [promoCode, setPromoCode] = useState("");
   const [promoDays, setPromoDays] = useState("30");
 
-  // proxy
-  const [proxyInfo, setProxyInfo] = useState<any>(null);
-  const [proxyTgId, setProxyTgId] = useState("");
-  const [proxyDays, setProxyDays] = useState("30");
-
   useEffect(() => {
     if (!getAdminToken()) {
       router.replace("/admin/login");
@@ -217,13 +210,6 @@ export default function AdminPage() {
       }),
     [run],
   );
-  const loadProxyInfo = useCallback(
-    () =>
-      run(async () => {
-        setProxyInfo(await adminFetch("/proxy/info"));
-      }),
-    [run],
-  );
 
   useEffect(() => {
     if (!ready) return;
@@ -233,8 +219,7 @@ export default function AdminPage() {
     if (tab === "orders") loadOrders();
     if (tab === "plans") loadPlans();
     if (tab === "promos") loadPromos();
-    if (tab === "proxy") loadProxyInfo();
-  }, [ready, tab, loadStats, loadHealth, loadUsers, loadOrders, loadPlans, loadPromos, loadProxyInfo]);
+  }, [ready, tab, loadStats, loadHealth, loadUsers, loadOrders, loadPlans, loadPromos]);
 
   const userRows = useMemo(() => (Array.isArray(users) ? users : []), [users]);
   const orderRows = useMemo(() => (Array.isArray(orders) ? orders : []), [orders]);
@@ -443,65 +428,6 @@ export default function AdminPage() {
             ))}
           </div>
         </Card>
-      )}
-
-      {tab === "proxy" && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card title="SOCKS5 на сервере">
-            <pre className="overflow-auto whitespace-pre-wrap text-sm text-white/80">{pre(proxyInfo)}</pre>
-            <div className="mt-3">
-              <Btn onClick={loadProxyInfo}>Обновить</Btn>
-            </div>
-          </Card>
-          <Card title="Выдать / продлить / отключить прокси">
-            <div className="space-y-3">
-              <Field label="Telegram ID" value={proxyTgId} onChange={(e) => setProxyTgId(e.target.value)} />
-              <Field label="Дни" value={proxyDays} onChange={(e) => setProxyDays(e.target.value)} />
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Btn
-                  tone="primary"
-                  onClick={() =>
-                    run(async () => {
-                      const res = await adminFetch(`/users/${proxyTgId}/proxy/grant`, {
-                        method: "POST",
-                        body: JSON.stringify({ days: Number(proxyDays), stack: false }),
-                      });
-                      flash(`Прокси выдан: ${pre(res)}`);
-                    })
-                  }
-                >
-                  Выдать
-                </Btn>
-                <Btn
-                  onClick={() =>
-                    run(async () => {
-                      const res = await adminFetch(`/users/${proxyTgId}/proxy/grant`, {
-                        method: "POST",
-                        body: JSON.stringify({ days: Number(proxyDays), stack: true }),
-                      });
-                      flash(`Прокси продлён: ${pre(res)}`);
-                    })
-                  }
-                >
-                  Продлить
-                </Btn>
-                <Btn
-                  tone="danger"
-                  onClick={() =>
-                    run(async () => {
-                      if (!confirm(`Снять прокси у ${proxyTgId}?`)) return;
-                      const res = await adminFetch(`/users/${proxyTgId}/proxy/revoke`, { method: "POST" });
-                      flash(`Прокси отключён: ${pre(res)}`);
-                    })
-                  }
-                >
-                  Отключить
-                </Btn>
-              </div>
-              <p className="text-xs text-white/45">Без уведомления пользователю. Доступ на аккаунт в боте.</p>
-            </div>
-          </Card>
-        </div>
       )}
 
       {tab === "actions" && (

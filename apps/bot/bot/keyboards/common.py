@@ -130,13 +130,17 @@ def subscription_keyboard(
     happ_open_url: str = "",
     *,
     show_devices: bool = True,
+    proxy: dict | None = None,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     # HTTPS open URL redirects into Happ — Telegram allows only http(s) buttons.
     open_url = happ_open_url if happ_open_url.startswith("http") else sub_url
     if open_url.startswith("http"):
         rows.append([InlineKeyboardButton(text="🚀 Открыть в Happ", url=open_url)])
-    if show_devices:
+    https_proxy = (proxy or {}).get("https_url") or ""
+    if proxy and proxy.get("active") and https_proxy.startswith("http"):
+        rows.append([InlineKeyboardButton(text="🔌 Добавить прокси в Telegram", url=https_proxy)])
+    if show_devices and sub_url:
         rows.append([InlineKeyboardButton(text="📱 Устройства", callback_data="devices:list")])
     if sub_url.startswith("http"):
         rows.append([InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="show_sub_url")])
@@ -239,8 +243,39 @@ def format_status(status: str | None) -> str:
     return mapping.get((status or "").lower(), status or "—")
 
 
-def format_subscription_card(sub: dict | None, *, brand: str = "Enigma_PN") -> str:
+def _format_proxy_block(proxy: dict | None) -> str:
+    if not proxy or not proxy.get("active"):
+        return ""
+    ends = format_ru_date(proxy.get("ends_at"))
+    host = escape(str(proxy.get("host") or ""))
+    port = escape(str(proxy.get("port") or ""))
+    secret = escape(str(proxy.get("secret") or ""))
+    https_url = escape(str(proxy.get("https_url") or ""))
+    return (
+        "\n\n🔌 <b>MTProto прокси</b>\n"
+        f"До: <b>{ends}</b>\n"
+        f"Сервер: <code>{host}</code>\n"
+        f"Порт: <code>{port}</code>\n"
+        f"Secret: <code>{secret}</code>\n"
+        f"Ссылка: <code>{https_url}</code>\n"
+        "Кнопка ниже добавит прокси в Telegram."
+    )
+
+
+def format_subscription_card(
+    sub: dict | None,
+    *,
+    brand: str = "Enigma_PN",
+    proxy: dict | None = None,
+) -> str:
+    proxy_block = _format_proxy_block(proxy)
     if not sub:
+        if proxy and proxy.get("active"):
+            return (
+                f"📱 <b>Подписка {escape(brand)}</b>\n\n"
+                "VPN-подписки пока нет."
+                f"{proxy_block}"
+            )
         return (
             f"📱 <b>Подписка {escape(brand)}</b>\n\n"
             "Пока нет активной подписки.\n"
@@ -297,4 +332,5 @@ def format_subscription_card(sub: dict | None, *, brand: str = "Enigma_PN") -> s
         f"Устройств: <b>{escape(devices_label)}</b>\n\n"
         "Нажмите «Открыть в Happ» — приложение само добавит подписку.\n"
         "Лишние устройства можно отключить кнопкой «Устройства»."
+        f"{proxy_block}"
     )

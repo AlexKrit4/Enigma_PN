@@ -37,10 +37,15 @@ class BuyFSM(StatesGroup):
     wait_custom_devices = State()
 
 
-def _sub_keyboard(sub: dict | None):
-    if not sub:
+def _sub_keyboard(sub: dict | None, proxy: dict | None = None):
+    if not sub and not (proxy and proxy.get("active")):
         return None
-    return subscription_keyboard(sub.get("sub_url") or "", sub.get("happ_open_url") or "")
+    return subscription_keyboard(
+        (sub or {}).get("sub_url") or "",
+        (sub or {}).get("happ_open_url") or "",
+        show_devices=bool(sub),
+        proxy=proxy,
+    )
 
 
 def _devices_text(payload: dict) -> str:

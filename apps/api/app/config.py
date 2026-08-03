@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 10080
     bot_api_token: str = "dev-bot-api-token"
 
+    # Web admin panel (bigwinzone.ru:1110)
+    admin_web_username: str = ""
+    admin_web_password: str = ""
+    admin_web_jwt_expire_minutes: int = 720
+
     marzban_url: str = "https://panel.bigwinzone.ru"
     marzban_username: str = "admin"
     marzban_password: str = ""

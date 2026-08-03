@@ -110,6 +110,11 @@ class TrialCreateIn(BaseModel):
     username: str | None = None
 
 
+class AdminWebLoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=256)
+
+
 class AdminExtendIn(BaseModel):
     days: int = Field(gt=0, le=3650)
 

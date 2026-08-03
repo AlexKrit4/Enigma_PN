@@ -54,6 +54,29 @@ async def require_bot(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bot token")
 
 
+async def require_admin_api(
+    authorization: str | None = Header(default=None),
+    x_bot_token: str | None = Header(default=None, alias="X-Bot-Token"),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Allow Telegram bot service token or web-admin JWT."""
+    if x_bot_token and x_bot_token == settings.bot_api_token:
+        return {"auth": "bot"}
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+        try:
+            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        except JWTError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token"
+            ) from exc
+        if payload.get("role") == "web_admin":
+            return {"auth": "web", "sub": payload.get("sub")}
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+
 async def get_or_create_telegram_user(
     db: AsyncSession,
     telegram_id: int,

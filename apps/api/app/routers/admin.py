@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 import os
+import secrets
 import shutil
 import socket
 from datetime import datetime, timedelta, timezone
@@ -12,13 +13,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from jose import jwt
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.deps import get_or_create_telegram_user, require_bot
+from app.deps import get_or_create_telegram_user, require_admin_api
 from app.models.entities import (
     Order,
     OrderStatus,
@@ -36,6 +38,7 @@ from app.schemas import (
     AdminPlanIn,
     AdminPlanPatchIn,
     AdminPromoIn,
+    AdminWebLoginIn,
     PlanOut,
     StatsOut,
 )
@@ -55,6 +58,41 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@router.post("/web/login")
+async def web_admin_login(
+    body: AdminWebLoginIn,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Browser admin login for the :1110 panel. No bot token required."""
+    username = (settings.admin_web_username or "").strip()
+    password = settings.admin_web_password or ""
+    if not username or not password:
+        raise HTTPException(status_code=503, detail="Web admin is not configured")
+    user_ok = secrets.compare_digest(body.username.strip(), username)
+    pass_ok = secrets.compare_digest(body.password, password)
+    if not (user_ok and pass_ok):
+        raise HTTPException(status_code=401, detail="Invalid login or password")
+    expire = _now() + timedelta(minutes=settings.admin_web_jwt_expire_minutes)
+    token = jwt.encode(
+        {"sub": username, "role": "web_admin", "exp": expire},
+        settings.secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_at": expire.isoformat(),
+        "username": username,
+    }
+
+
+@router.get("/web/me")
+async def web_admin_me(
+    auth: dict = Depends(require_admin_api),
+) -> dict:
+    return {"ok": True, "auth": auth}
 
 
 def _bytes_to_gb(value: int | float | None) -> float:
@@ -125,7 +163,7 @@ async def _user_payload(db: AsyncSession, user: User, settings: Settings) -> dic
 @router.get("/stats", response_model=StatsOut)
 async def stats(
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> StatsOut:
     users_total = await db.scalar(select(func.count()).select_from(User)) or 0
     active = await db.scalar(
@@ -182,7 +220,7 @@ async def stats(
 async def admin_health(
     settings: Settings = Depends(get_settings),
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     db_ok = False
     try:
@@ -248,7 +286,7 @@ async def list_users(
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """List recent users. status=active|trial|all|recent"""
     if status_filter in {"active", "trial"}:
@@ -296,7 +334,7 @@ async def lookup_user(
     q: str = Query(min_length=1),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     raw = q.strip().lstrip("@")
     user = None
@@ -316,7 +354,7 @@ async def user_by_telegram(
     telegram_id: int,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
@@ -331,7 +369,7 @@ async def extend_user(
     body: AdminExtendIn,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Silent extend — no Telegram notify to the user."""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
@@ -360,7 +398,7 @@ async def grant_user(
     body: AdminGrantIn,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Silent grant — no Telegram notify to the user."""
     user = await get_or_create_telegram_user(
@@ -390,7 +428,7 @@ async def revoke_user(
     telegram_id: int,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Disable subscription + Marzban cut-off. Silent."""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
@@ -414,7 +452,7 @@ async def patch_limits(
     body: AdminLimitsIn,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Update traffic/device limits without re-issuing days. Silent."""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
@@ -444,7 +482,7 @@ async def list_orders(
     status: str = Query(default="pending"),
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     try:
         st = OrderStatus(status)
@@ -479,7 +517,7 @@ async def confirm_order_by_label(
     payment_label: str,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Manual payment confirmation. Silent — user is not notified."""
     result = await db.execute(select(Order).where(Order.payment_label == payment_label))
@@ -507,7 +545,7 @@ async def broadcast(
     body: AdminBroadcastIn,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Explicit admin broadcast. Only fires when admin confirms in the bot."""
     audience = (body.audience or "active").lower()
@@ -548,7 +586,7 @@ async def broadcast(
 @router.get("/plans", response_model=list[PlanOut])
 async def admin_plans(
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> list[Plan]:
     result = await db.execute(select(Plan).order_by(Plan.sort_order))
     return list(result.scalars().all())
@@ -558,7 +596,7 @@ async def admin_plans(
 async def create_plan(
     body: AdminPlanIn,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> Plan:
     existing = await db.scalar(select(Plan).where(Plan.slug == body.slug))
     if existing:
@@ -585,7 +623,7 @@ async def patch_plan(
     plan_id: UUID,
     body: AdminPlanPatchIn,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> Plan:
     plan = await db.get(Plan, plan_id)
     if not plan:
@@ -601,7 +639,7 @@ async def patch_plan(
 @router.get("/promos")
 async def list_promos(
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     result = await db.execute(select(PromoCode).order_by(PromoCode.created_at.desc()).limit(50))
     items = []
@@ -627,7 +665,7 @@ async def list_promos(
 async def create_promo(
     body: AdminPromoIn,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     code = body.code.strip().upper()
     existing = await db.scalar(select(PromoCode).where(func.upper(PromoCode.code) == code))
@@ -651,7 +689,7 @@ async def create_promo(
 async def disable_promo(
     code: str,
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     promo = await db.scalar(select(PromoCode).where(func.upper(PromoCode.code) == code.strip().upper()))
     if not promo:
@@ -667,7 +705,7 @@ async def redeem_promo_admin(
     telegram_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> dict:
     """Admin-driven silent promo redeem for a specific user."""
     from app.models.entities import PromoRedemption
@@ -711,7 +749,7 @@ async def redeem_promo_admin(
 @router.get("/export.csv")
 async def export_csv(
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> StreamingResponse:
     result = await db.execute(select(User).order_by(User.created_at.desc()).limit(5000))
     users = list(result.scalars().all())
@@ -745,7 +783,7 @@ async def export_csv(
 @router.get("/subscriptions")
 async def admin_subscriptions(
     db: AsyncSession = Depends(get_db),
-    _: None = Depends(require_bot),
+    _: None = Depends(require_admin_api),
 ) -> list[dict]:
     result = await db.execute(
         select(Subscription).options(selectinload(Subscription.user), selectinload(Subscription.plan)).limit(100)

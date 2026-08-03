@@ -12,7 +12,7 @@ import structlog
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import get_current_user
-from app.models.entities import Order, Subscription, SubscriptionStatus, User
+from app.models.entities import Order, Plan, Subscription, SubscriptionStatus, User
 from app.services.devices import (
     active_device_count,
     kick_device,
@@ -247,9 +247,9 @@ async def yoomoney_webhook(
         raw=result.raw,
         settings=settings,
     )
-    if created and sub:
+    if created:
         user = await db.get(User, order.user_id)
-        if user:
+        if user and sub:
             await notify_subscription_ready(
                 db,
                 user=user,
@@ -257,6 +257,24 @@ async def yoomoney_webhook(
                 title="Оплата получена — подписка активна",
                 settings=settings,
             )
+        elif user:
+            from app.services.proxy import (
+                get_active_proxy_access,
+                is_proxy_kind,
+                notify_proxy_ready,
+            )
+
+            plan = await db.get(Plan, order.plan_id) if order.plan_id else None
+            if is_proxy_kind(plan, order.meta):
+                access = await get_active_proxy_access(db, user.id)
+                if access:
+                    await notify_proxy_ready(
+                        db,
+                        user=user,
+                        access=access,
+                        title="Оплата получена — прокси активен",
+                        settings=settings,
+                    )
     return {
         "ok": True,
         "created": created,

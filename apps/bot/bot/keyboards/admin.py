@@ -27,8 +27,20 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🏷 Тарифы", callback_data="adm:plans"),
                 InlineKeyboardButton(text="🎟 Промокоды", callback_data="adm:promos"),
             ],
+            [InlineKeyboardButton(text="🔌 Прокси", callback_data="adm:proxy")],
             [InlineKeyboardButton(text="📥 Экспорт CSV", callback_data="adm:export")],
             [InlineKeyboardButton(text="✖️ Закрыть", callback_data="adm:close")],
+        ]
+    )
+
+
+def proxy_admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎁 Выдать прокси", callback_data="adm:proxy_grant")],
+            [InlineKeyboardButton(text="⏱ Продлить прокси", callback_data="adm:proxy_extend")],
+            [InlineKeyboardButton(text="🚫 Отключить прокси", callback_data="adm:proxy_revoke")],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="adm:menu")],
         ]
     )
 
@@ -136,6 +148,10 @@ def user_card_keyboard(telegram_id: int) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="⚙️ Лимиты", callback_data=f"adm:u_limits:{telegram_id}"),
                 InlineKeyboardButton(text="🚫 Отключить", callback_data=f"adm:u_revoke:{telegram_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="🔌 Выдать прокси", callback_data=f"adm:u_proxy_grant:{telegram_id}"),
+                InlineKeyboardButton(text="🚫 Снять прокси", callback_data=f"adm:u_proxy_revoke:{telegram_id}"),
             ],
             [InlineKeyboardButton(text="⬅️ В меню", callback_data="adm:menu")],
         ]

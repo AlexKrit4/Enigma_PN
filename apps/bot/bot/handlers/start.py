@@ -17,10 +17,12 @@ from bot.keyboards.common import (
     custom_devices_keyboard,
     custom_gb_keyboard,
     devices_keyboard,
+    format_proxy_card,
     format_subscription_card,
     main_menu,
     pay_keyboard,
     plans_keyboard,
+    proxy_keyboard,
     subscription_keyboard,
     tariff_type_keyboard,
 )
@@ -70,10 +72,20 @@ def _tariff_home_text() -> str:
         "<b>Ограниченный</b> — пакет ГБ на месяц, 3 устройства. "
         "Отключается, когда кончится трафик или срок.\n\n"
         "<b>Вечный</b> — без лимита трафика, только срок. 3 устройства.\n\n"
+        "<b>Прокси Telegram</b> — MTProto только для Telegram, "
+        "на ваш аккаунт в боте, без устройств. 70 ₽ / 30 дней.\n\n"
         "<b>Свой тариф</b> — сами выбираете ГБ, дни и устройства.\n"
         "Цена: 2 ₽/ГБ + 1 ₽/день + 25 ₽/устройство.\n"
         "Вечный трафик в своём тарифе недоступен."
     )
+
+
+async def _proxy_plan_id() -> str | None:
+    plans = await _plans_by_group("прокси")
+    if not plans:
+        return None
+    plans = sorted(plans, key=lambda p: int(p.get("sort_order") or 0))
+    return str(plans[0]["id"])
 
 
 def _format_custom_quote(q: dict) -> str:
@@ -165,6 +177,39 @@ async def cb_tarif_eternal(callback: CallbackQuery, state: FSMContext) -> None:
     )
     await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
     await callback.answer()
+
+
+@router.callback_query(F.data == "tarif:proxy")
+async def cb_tarif_proxy(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    assert callback.message
+    plans = await _plans_by_group("прокси")
+    text = (
+        "🔌 <b>MTProto прокси для Telegram</b>\n\n"
+        "Только Telegram, без VPN на весь интернет.\n"
+        "Действует на <b>аккаунт покупателя</b> в боте.\n"
+        "Лимита устройств нет — это не Happ-подписка.\n\n"
+        "После оплаты данные появятся в «🔌 Прокси»."
+    )
+    await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(Command("proxy"))
+@router.message(F.text == "🔌 Прокси")
+async def cmd_proxy(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    user = message.from_user
+    assert user
+    data = await api.auth(user.id, user.username)
+    me = await api.me(data["access_token"])
+    proxy = me.get("proxy")
+    plan_id = await _proxy_plan_id()
+    await message.answer(
+        format_proxy_card(proxy),
+        reply_markup=proxy_keyboard(proxy, buy_plan_id=plan_id),
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data == "tarif:custom")
@@ -489,7 +534,8 @@ async def cmd_help(message: Message, state: FSMContext) -> None:
         "2. В боте откройте «📱 Моя подписка»\n"
         "3. Нажмите «🚀 Открыть в Happ» — подписка добавится сама\n"
         "4. В Happ обновите подписку и включите сервер Finland\n\n"
-        "Тарифы: ограниченный / вечный / свой.\n"
+        "Тарифы: ограниченный / вечный / прокси Telegram / свой.\n"
+        "Прокси: раздел «🔌 Прокси» — MTProto только для Telegram.\n"
         f"Сайт: https://{get_settings().domain}"
     )
     await message.answer(text)
@@ -512,7 +558,7 @@ async def forward_support(message: Message) -> None:
     settings = get_settings()
     if not settings.admin_telegram_ids:
         return
-    if message.text in {"🛒 Тарифы", "📱 Моя подписка", "❓ Помощь", "💬 Поддержка"}:
+    if message.text in {"🛒 Тарифы", "📱 Моя подписка", "🔌 Прокси", "❓ Помощь", "💬 Поддержка"}:
         return
     user = message.from_user
     assert user

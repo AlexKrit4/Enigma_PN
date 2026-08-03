@@ -159,6 +159,25 @@ class ApiClient:
     async def admin_revoke(self, telegram_id: int) -> dict:
         return await self._request("POST", f"/admin/users/{telegram_id}/revoke")
 
+    async def admin_proxy_info(self) -> dict:
+        return await self._request("GET", "/admin/proxy/info")
+
+    async def admin_proxy_grant(
+        self,
+        telegram_id: int,
+        days: int,
+        *,
+        username: str | None = None,
+        stack: bool = True,
+    ) -> dict:
+        payload: dict[str, Any] = {"days": days, "stack": stack}
+        if username:
+            payload["username"] = username
+        return await self._request("POST", f"/admin/users/{telegram_id}/proxy/grant", json=payload)
+
+    async def admin_proxy_revoke(self, telegram_id: int) -> dict:
+        return await self._request("POST", f"/admin/users/{telegram_id}/proxy/revoke")
+
     async def admin_limits(
         self,
         telegram_id: int,

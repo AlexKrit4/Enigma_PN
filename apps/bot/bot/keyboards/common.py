@@ -10,7 +10,8 @@ def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛒 Тарифы"), KeyboardButton(text="📱 Моя подписка")],
-            [KeyboardButton(text="❓ Помощь"), KeyboardButton(text="💬 Поддержка")],
+            [KeyboardButton(text="🔌 Прокси"), KeyboardButton(text="❓ Помощь")],
+            [KeyboardButton(text="💬 Поддержка")],
         ],
         resize_keyboard=True,
     )
@@ -21,6 +22,7 @@ def tariff_type_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="📦 Ограниченный", callback_data="tarif:limited")],
             [InlineKeyboardButton(text="♾️ Вечный", callback_data="tarif:eternal")],
+            [InlineKeyboardButton(text="🔌 Прокси Telegram", callback_data="tarif:proxy")],
             [InlineKeyboardButton(text="🛠 Свой тариф", callback_data="tarif:custom")],
         ]
     )
@@ -42,6 +44,10 @@ def plans_keyboard(plans: list[dict], *, back: bool = True) -> InlineKeyboardMar
                 period = f"{months} мес." if months != 1 else "1 месяц"
             else:
                 period = f"{days} дн."
+            label = f"{period} — {plan['price_rub']} ₽"
+        elif plan.get("group_name") == "прокси":
+            days = int(plan.get("duration_days") or 0)
+            period = "1 месяц" if days == 30 else f"{days} дн."
             label = f"{period} — {plan['price_rub']} ₽"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"buy:{plan['id']}")])
     if back:
@@ -158,6 +164,40 @@ def devices_keyboard(devices: list[dict]) -> InlineKeyboardMarkup:
 def pay_keyboard(payment_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="💳 Оплатить через ЮMoney", url=payment_url)]]
+    )
+
+
+def proxy_keyboard(proxy: dict | None = None, *, buy_plan_id: str | None = None) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    https_url = (proxy or {}).get("https_url") or ""
+    if proxy and proxy.get("active") and https_url.startswith("http"):
+        rows.append([InlineKeyboardButton(text="🔌 Добавить в Telegram", url=https_url)])
+    if buy_plan_id:
+        rows.append([InlineKeyboardButton(text="💳 Купить / продлить — 70 ₽", callback_data=f"buy:{buy_plan_id}")])
+    rows.append([InlineKeyboardButton(text="🛒 Все тарифы", callback_data="tarif:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def format_proxy_card(proxy: dict | None) -> str:
+    if not proxy or not proxy.get("active"):
+        return (
+            "🔌 <b>MTProto прокси</b>\n\n"
+            "Сейчас доступа нет.\n"
+            "Прокси привязан к <b>вашему аккаунту</b> в боте (без лимита устройств).\n"
+            "Тариф: <b>70 ₽ / 30 дней</b>."
+        )
+    ends = format_ru_date(proxy.get("ends_at"))
+    host = escape(str(proxy.get("host") or ""))
+    port = escape(str(proxy.get("port") or ""))
+    secret = escape(str(proxy.get("secret") or ""))
+    return (
+        "🔌 <b>MTProto прокси активен</b>\n\n"
+        f"До: <b>{ends}</b>\n"
+        f"Сервер: <code>{host}</code>\n"
+        f"Порт: <code>{port}</code>\n"
+        f"Secret: <code>{secret}</code>\n\n"
+        "Нажмите кнопку ниже — Telegram добавит прокси сам.\n"
+        "Доступ действует на аккаунт, который купил тариф."
     )
 
 

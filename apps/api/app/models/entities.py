@@ -68,6 +68,7 @@ class User(Base):
 
     subscriptions: Mapped[list[Subscription]] = relationship(back_populates="user")
     orders: Mapped[list[Order]] = relationship(back_populates="user")
+    proxy_access: Mapped[ProxyAccess | None] = relationship(back_populates="user", uselist=False)
 
 
 class Plan(Base):
@@ -207,3 +208,27 @@ class SubscriptionDevice(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     subscription: Mapped[Subscription] = relationship(back_populates="devices")
+
+
+class ProxyAccess(Base):
+    """Paid MTProto Telegram proxy access bound to one bot account (no device limit)."""
+
+    __tablename__ = "proxy_access"
+    __table_args__ = (Index("ix_proxy_access_status_ends", "status", "ends_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), unique=True, index=True
+    )
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus), default=SubscriptionStatus.active
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="proxy_access")

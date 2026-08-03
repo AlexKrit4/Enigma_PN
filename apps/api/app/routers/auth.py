@@ -13,6 +13,7 @@ from app.services.provisioning import (
     get_active_subscription,
     serialize_subscription_with_devices,
 )
+from app.services.proxy import get_proxy_access, serialize_proxy_access
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -29,6 +30,7 @@ async def auth_telegram(
     token = create_access_token(user.id, settings)
     sub = await get_active_subscription(db, user.id)
     sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    proxy = serialize_proxy_access(await get_proxy_access(db, user.id), settings)
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -40,6 +42,7 @@ async def auth_telegram(
             is_admin=user.is_admin,
             created_at=user.created_at,
             subscription=sub_data,  # type: ignore[arg-type]
+            proxy=proxy,  # type: ignore[arg-type]
         ),
     }
 
@@ -52,6 +55,7 @@ async def me(
 ) -> UserOut:
     sub = await get_active_subscription(db, user.id)
     sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    proxy = serialize_proxy_access(await get_proxy_access(db, user.id), settings)
     return UserOut(
         id=user.id,
         telegram_id=user.telegram_id,
@@ -60,6 +64,7 @@ async def me(
         is_admin=user.is_admin,
         created_at=user.created_at,
         subscription=sub_data,  # type: ignore[arg-type]
+        proxy=proxy,  # type: ignore[arg-type]
     )
 
 

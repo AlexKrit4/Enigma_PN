@@ -247,16 +247,31 @@ async def provision_subscription(
     return subscription
 
 
-async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings | None = None) -> Subscription:
+async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings | None = None) -> Subscription | None:
     settings = settings or get_settings()
     from app.services.pricing import order_terms
+    from app.services.proxy import grant_or_extend_proxy, is_proxy_kind
 
     plan = await db.get(Plan, order.plan_id) if order.plan_id else None
+    meta = order.meta or {}
+    if is_proxy_kind(plan, meta):
+        user = await db.get(User, order.user_id)
+        if not user:
+            raise ValueError("Order user not found")
+        terms = order_terms(meta, plan)
+        await grant_or_extend_proxy(
+            db,
+            user=user,
+            days=int(terms["duration_days"]),
+            order_id=order.id,
+            stack=True,
+        )
+        return None
+
     terms = order_terms(order.meta, plan)
     duration_days = int(terms["duration_days"])
     traffic_gb = terms.get("traffic_gb")
     device_limit = int(terms["device_limit"])
-    meta = order.meta or {}
     # Custom packages are exact: N days from purchase moment, not stacked on old plan leftovers.
     is_custom = (meta.get("kind") == "свой") or (plan is None)
 

@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     happ_provider_id: str = ""
     happ_profile_title: str = "Enigma_PN"
 
+    # Shared MTProto proxy (Telegram) — access gated by ProxyAccess per account
+    mtproto_enabled: bool = False
+    mtproto_host: str = "bigwinzone.ru"
+    mtproto_port: int = 8443
+    mtproto_secret: str = ""
+
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod
     def parse_admin_ids(cls, value: Any) -> list[int]:

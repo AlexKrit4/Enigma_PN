@@ -52,6 +52,20 @@ class SubscriptionOut(BaseModel):
     plan: PlanOut | None = None
 
 
+class ProxyOut(BaseModel):
+    id: str
+    status: str
+    starts_at: datetime | str | None = None
+    ends_at: datetime | str | None = None
+    active: bool = False
+    title: str | None = None
+    host: str | None = None
+    port: str | None = None
+    secret: str | None = None
+    tg_url: str | None = None
+    https_url: str | None = None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +76,13 @@ class UserOut(BaseModel):
     is_admin: bool
     created_at: datetime
     subscription: SubscriptionOut | None = None
+    proxy: ProxyOut | None = None
+
+
+class AdminProxyGrantIn(BaseModel):
+    days: int = Field(gt=0, le=3650)
+    username: str | None = None
+    stack: bool = True
 
 
 class TelegramAuthIn(BaseModel):

@@ -45,6 +45,7 @@ class SubscriptionOut(BaseModel):
     device_limit: int
     devices_used: int = 0
     devices: list[DeviceOut] | None = None
+    title: str | None = None
     sub_url: str | None = None
     happ_deep_link: str | None = None
     happ_open_url: str | None = None

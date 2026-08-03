@@ -208,7 +208,7 @@ def format_subscription_card(sub: dict | None, *, brand: str = "Enigma_PN") -> s
         )
 
     plan = sub.get("plan") or {}
-    plan_name = plan.get("name")
+    plan_name = sub.get("title") or plan.get("name")
     if not plan_name:
         plan_name = "Пробный период" if (sub.get("status") or "").lower() == "trial" else "VPN-доступ"
 

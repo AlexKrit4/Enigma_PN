@@ -68,6 +68,7 @@ def serialize_subscription(
     *,
     devices_used: int | None = None,
     devices: list[dict] | None = None,
+    title: str | None = None,
 ) -> dict | None:
     if not sub:
         return None
@@ -97,6 +98,23 @@ def serialize_subscription(
                 "is_active": plan.is_active,
                 "sort_order": plan.sort_order,
             }
+    # Custom orders have no plan — expose purchased title as plan.name for UI.
+    if title and plan_data is None:
+        plan_data = {
+            "id": None,
+            "slug": "custom",
+            "name": title,
+            "group_name": "свой",
+            "duration_days": None,
+            "traffic_gb": sub.traffic_limit_gb,
+            "device_limit": sub.device_limit,
+            "price_rub": None,
+            "is_active": True,
+            "sort_order": 0,
+        }
+    elif title and plan_data is not None:
+        # Prefer explicit purchased title when present (e.g. after catalog rename).
+        plan_data = {**plan_data, "name": title}
     data = {
         "id": str(sub.id),
         "status": sub.status.value,
@@ -106,6 +124,7 @@ def serialize_subscription(
         "traffic_used_gb": str(sub.traffic_used_gb),
         "device_limit": sub.device_limit,
         "devices_used": devices_used if devices_used is not None else 0,
+        "title": title or (plan_data.get("name") if plan_data else None),
         "sub_url": sub_url,
         "happ_deep_link": build_happ_deep_link(sub_url),
         "happ_open_url": build_happ_open_url(sub.sub_token, settings),
@@ -131,11 +150,19 @@ async def serialize_subscription_with_devices(
     devices_payload = None
     if include_devices:
         devices_payload = [serialize_device(d) for d in await list_devices(db, sub.id) if not d.is_blocked]
+
+    title = None
+    if sub.order_id:
+        order = await db.get(Order, sub.order_id)
+        if order and order.meta:
+            title = order.meta.get("title")
+
     return serialize_subscription(
         sub,
         settings,
         devices_used=used,
         devices=devices_payload,
+        title=title,
     )
 
 
@@ -240,6 +267,9 @@ async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings
     duration_days = int(terms["duration_days"])
     traffic_gb = terms.get("traffic_gb")
     device_limit = int(terms["device_limit"])
+    meta = order.meta or {}
+    # Custom packages are exact: N days from purchase moment, not stacked on old plan leftovers.
+    is_custom = (meta.get("kind") == "свой") or (plan is None)
 
     active = await get_active_subscription(db, order.user_id)
     if not active:
@@ -254,13 +284,16 @@ async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings
         active = result.scalar_one_or_none()
 
     if active and active.marzban_username:
-        if active.status in {SubscriptionStatus.disabled, SubscriptionStatus.expired}:
-            base = active.ends_at if active.ends_at > _now() else _now()
+        now = _now()
+        if is_custom:
+            active.ends_at = now + timedelta(days=duration_days)
+            active.starts_at = now
         else:
-            base = active.ends_at if active.ends_at > _now() else _now()
-        active.ends_at = base + timedelta(days=duration_days)
+            base = active.ends_at if active.ends_at > now else now
+            active.ends_at = base + timedelta(days=duration_days)
         active.status = SubscriptionStatus.active
-        active.plan_id = plan.id if plan else active.plan_id
+        # Never keep a stale catalog plan on a custom purchase.
+        active.plan_id = plan.id if plan else None
         active.order_id = order.id
         active.traffic_limit_gb = traffic_gb
         active.device_limit = device_limit

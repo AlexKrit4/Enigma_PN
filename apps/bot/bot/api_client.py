@@ -86,17 +86,39 @@ class ApiClient:
         telegram_id: int,
         days: int,
         traffic_gb: int | None = None,
+        clear_traffic_limit: bool = False,
         device_limit: int | None = None,
         username: str | None = None,
     ) -> dict:
-        payload: dict[str, Any] = {"days": days}
-        if traffic_gb is not None:
+        payload: dict[str, Any] = {
+            "days": days,
+            "clear_traffic_limit": clear_traffic_limit or traffic_gb == 0,
+        }
+        if traffic_gb is not None and traffic_gb > 0:
             payload["traffic_gb"] = traffic_gb
         if device_limit is not None:
             payload["device_limit"] = device_limit
         if username:
             payload["username"] = username
         return await self._request("POST", f"/admin/users/{telegram_id}/grant", json=payload)
+
+    async def list_devices(self, access_token: str) -> dict:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{self.base}/api/v1/me/devices",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def kick_device(self, access_token: str, device_id: str) -> dict:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{self.base}/api/v1/me/devices/{device_id}/kick",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     async def admin_revoke(self, telegram_id: int) -> dict:
         return await self._request("POST", f"/admin/users/{telegram_id}/revoke")

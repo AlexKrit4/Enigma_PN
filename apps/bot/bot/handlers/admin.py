@@ -166,7 +166,12 @@ async def _run_text_command(message: Message, args: list[str]) -> bool:
             return True
         if cmd == "grant" and len(args) >= 3:
             traffic_gb = int(args[3]) if len(args) >= 4 else None
-            result = await api.admin_grant(int(args[1]), int(args[2]), traffic_gb=traffic_gb)
+            result = await api.admin_grant(
+                int(args[1]),
+                int(args[2]),
+                traffic_gb=None if traffic_gb == 0 else traffic_gb,
+                clear_traffic_limit=(traffic_gb == 0),
+            )
             sub = result.get("subscription") or {}
             await message.answer(
                 f"✅ Выдано (без уведа).\nДо: {result.get('ends_at')}\n"
@@ -501,7 +506,10 @@ async def cb_grant_gb(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     gb = int(value)
-    await state.update_data(traffic_gb=None if gb == 0 else gb)
+    await state.update_data(
+        traffic_gb=None if gb == 0 else gb,
+        clear_traffic_limit=(gb == 0),
+    )
     data = await state.get_data()
     await _ask_grant_confirm(callback.message, callback.from_user, data, edit=True)
     await callback.answer()
@@ -516,14 +524,21 @@ async def fsm_grant_gb_custom(message: Message, state: FSMContext) -> None:
         await message.answer("Число GB:", reply_markup=admin_cancel_keyboard())
         return
     gb = int(raw)
-    await state.update_data(traffic_gb=None if gb == 0 else gb)
+    await state.update_data(
+        traffic_gb=None if gb == 0 else gb,
+        clear_traffic_limit=(gb == 0),
+    )
     await state.set_state(None)
     data = await state.get_data()
     await _ask_grant_confirm(message, message.from_user, data, edit=False)
 
 
 async def _ask_grant_confirm(message: Message, user, data: dict[str, Any], *, edit: bool) -> None:
-    traffic_label = "∞" if data.get("traffic_gb") is None else f"{data.get('traffic_gb')} GB"
+    traffic_label = (
+        "∞"
+        if data.get("clear_traffic_limit") or data.get("traffic_gb") in (None, 0)
+        else f"{data.get('traffic_gb')} GB"
+    )
     text = (
         "🎁 Подтвердите выдачу (без уведа юзеру):\n"
         f"Кому: <code>{data.get('tg_id')}</code>\n"
@@ -1064,6 +1079,7 @@ async def cb_do_action(callback: CallbackQuery, state: FSMContext) -> None:
                 int(data["tg_id"]),
                 int(data["days"]),
                 traffic_gb=data.get("traffic_gb"),
+                clear_traffic_limit=bool(data.get("clear_traffic_limit")),
             )
             sub = result.get("subscription") or {}
             text = (

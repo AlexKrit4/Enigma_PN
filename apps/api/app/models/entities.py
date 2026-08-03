@@ -132,6 +132,7 @@ class Subscription(Base):
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
     plan: Mapped[Plan | None] = relationship()
+    devices: Mapped[list[SubscriptionDevice]] = relationship(back_populates="subscription")
 
 
 class Payment(Base):
@@ -185,3 +186,22 @@ class PromoRedemption(Base):
     promo_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("promo_codes.id"), index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionDevice(Base):
+    __tablename__ = "subscription_devices"
+    __table_args__ = (UniqueConstraint("subscription_id", "hwid", name="uq_subscription_device_hwid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), index=True
+    )
+    hwid: Mapped[str] = mapped_column(String(128), index=True)
+    device_os: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    device_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    subscription: Mapped[Subscription] = relationship(back_populates="devices")

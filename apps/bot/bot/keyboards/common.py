@@ -29,14 +29,39 @@ def plans_keyboard(plans: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def subscription_keyboard(sub_url: str, happ_open_url: str = "") -> InlineKeyboardMarkup:
+def subscription_keyboard(
+    sub_url: str,
+    happ_open_url: str = "",
+    *,
+    show_devices: bool = True,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     # HTTPS open URL redirects into Happ — Telegram allows only http(s) buttons.
     open_url = happ_open_url if happ_open_url.startswith("http") else sub_url
     if open_url.startswith("http"):
         rows.append([InlineKeyboardButton(text="🚀 Открыть в Happ", url=open_url)])
+    if show_devices:
+        rows.append([InlineKeyboardButton(text="📱 Устройства", callback_data="devices:list")])
     if sub_url.startswith("http"):
         rows.append([InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="show_sub_url")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def devices_keyboard(devices: list[dict]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for device in devices:
+        label = str(device.get("label") or "устройство")[:40]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"⏏ {label}",
+                    callback_data=f"devices:kick:{device['id']}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="« Назад к подписке", callback_data="devices:back")])
+    if not devices:
+        rows = [[InlineKeyboardButton(text="« Назад к подписке", callback_data="devices:back")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -105,15 +130,41 @@ def format_subscription_card(sub: dict | None, *, brand: str = "Enigma_PN") -> s
     except (TypeError, ValueError):
         used_label = str(used_raw or "0")
     traffic = f"{used_label} / {'∞' if limit is None else limit} ГБ"
-    devices = sub.get("device_limit") or "—"
+    device_limit = sub.get("device_limit")
+    devices_used = sub.get("devices_used")
+    if devices_used is None:
+        devices_label = str(device_limit or "—")
+    elif device_limit:
+        devices_label = f"{devices_used} / {device_limit}"
+    else:
+        devices_label = str(devices_used)
+
+    days_left = sub.get("days_left")
+    days_line = ""
+    if days_left is not None:
+        days_line = f"Осталось дней: <b>{escape(str(days_left))}</b>\n"
+    else:
+        ends = sub.get("ends_at")
+        if ends:
+            try:
+                end_dt = datetime.fromisoformat(str(ends).replace("Z", "+00:00"))
+                from datetime import timezone
+
+                now = datetime.now(timezone.utc)
+                secs = int((end_dt - now).total_seconds())
+                left = 0 if secs <= 0 else max(1, (secs + 86399) // 86400)
+                days_line = f"Осталось дней: <b>{left}</b>\n"
+            except ValueError:
+                pass
 
     return (
         f"📱 <b>Ваша подписка</b>\n\n"
         f"Тариф: <b>{escape(str(plan_name))}</b>\n"
         f"Статус: <b>{escape(format_status(sub.get('status')))}</b>\n"
         f"Действует до: <b>{format_ru_date(sub.get('ends_at'))}</b>\n"
+        f"{days_line}"
         f"Трафик: <b>{escape(traffic)}</b>\n"
-        f"Устройств: <b>{escape(str(devices))}</b>\n\n"
+        f"Устройств: <b>{escape(devices_label)}</b>\n\n"
         "Нажмите «Открыть в Happ» — приложение само добавит подписку.\n"
-        "Если Happ ещё нет: установите его, затем вернитесь и нажмите кнопку снова."
+        "Лишние устройства можно отключить кнопкой «Устройства»."
     )

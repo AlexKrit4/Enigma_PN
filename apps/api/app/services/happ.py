@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import quote
 
@@ -98,6 +98,45 @@ def profile_title_header(title: str) -> str:
     return f"base64:{encoded}"
 
 
+def announce_header(text: str) -> str:
+    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    return f"base64:{encoded}"
+
+
+def days_left(ends_at: datetime) -> int:
+    now = datetime.now(timezone.utc)
+    end = ends_at if ends_at.tzinfo else ends_at.replace(tzinfo=timezone.utc)
+    delta = end - now
+    seconds = int(delta.total_seconds())
+    if seconds <= 0:
+        return 0
+    return max(1, (seconds + 86399) // 86400)
+
+
+def build_sub_status_text(
+    subscription: Subscription,
+    *,
+    devices_used: int | None = None,
+) -> str:
+    left = days_left(subscription.ends_at)
+    if left == 0:
+        days_part = "истекла"
+    elif left == 1:
+        days_part = "остался 1 день"
+    elif left in {2, 3, 4}:
+        days_part = f"осталось {left} дня"
+    else:
+        days_part = f"осталось {left} дней"
+
+    used = 0 if devices_used is None else max(0, int(devices_used))
+    limit = subscription.device_limit or 0
+    if limit > 0:
+        devices_part = f"устройств {used}/{limit}"
+    else:
+        devices_part = f"устройств {used}"
+    return f"{days_part} · {devices_part}"
+
+
 def enrich_links_for_happ(links: list[str]) -> list[str]:
     """Ensure server names keep country flags for Happ UI."""
     return links
@@ -107,11 +146,16 @@ def build_subscription_response(
     subscription: Subscription,
     links: list[str],
     settings: Settings | None = None,
+    *,
+    devices_used: int | None = None,
 ) -> tuple[str, dict[str, str]]:
     settings = settings or get_settings()
     body = links_to_subscription_body(enrich_links_for_happ(links))
     used = float(subscription.traffic_used_gb or Decimal("0"))
     used_bytes = int(used * 1024**3)
+    status_text = build_sub_status_text(subscription, devices_used=devices_used)
+    # Keep under Happ sub-info-text limit (200).
+    info_text = status_text[:200]
     headers = {
         "profile-title": profile_title_header(settings.happ_profile_title),
         "subscription-userinfo": subscription_userinfo(
@@ -122,6 +166,11 @@ def build_subscription_response(
         ),
         "profile-update-interval": "12",
         "content-disposition": f'attachment; filename="{settings.brand_name}.txt"',
+        "announce": announce_header(status_text),
+        "sub-info-text": info_text,
+        "sub-info-color": "blue",
+        "sub-expire": "1",
+        "subscription-always-hwid-enable": "1",
     }
     if settings.happ_provider_id:
         headers["provider-id"] = settings.happ_provider_id

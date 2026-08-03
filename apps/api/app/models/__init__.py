@@ -6,6 +6,7 @@ from app.models.entities import (
     PromoCode,
     PromoRedemption,
     Subscription,
+    SubscriptionDevice,
     User,
     VpnNode,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "Plan",
     "Order",
     "Subscription",
+    "SubscriptionDevice",
     "Payment",
     "VpnNode",
     "PromoCode",

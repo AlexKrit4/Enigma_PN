@@ -22,6 +22,17 @@ class PlanOut(BaseModel):
     sort_order: int
 
 
+class DeviceOut(BaseModel):
+    id: uuid.UUID
+    hwid: str
+    label: str
+    device_os: str | None = None
+    device_model: str | None = None
+    is_blocked: bool = False
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
+
+
 class SubscriptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,6 +43,8 @@ class SubscriptionOut(BaseModel):
     traffic_limit_gb: int | None
     traffic_used_gb: Decimal
     device_limit: int
+    devices_used: int = 0
+    devices: list[DeviceOut] | None = None
     sub_url: str | None = None
     happ_deep_link: str | None = None
     happ_open_url: str | None = None
@@ -88,6 +101,7 @@ class AdminExtendIn(BaseModel):
 class AdminGrantIn(BaseModel):
     days: int = Field(gt=0, le=3650)
     traffic_gb: int | None = Field(default=None, ge=0)
+    clear_traffic_limit: bool = False
     device_limit: int | None = Field(default=None, ge=1, le=50)
     username: str | None = None
 

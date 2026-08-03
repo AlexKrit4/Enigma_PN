@@ -62,7 +62,13 @@ async def get_active_subscription(db: AsyncSession, user_id: UUID) -> Subscripti
     return result.scalars().first()
 
 
-def serialize_subscription(sub: Subscription | None, settings: Settings | None = None) -> dict | None:
+def serialize_subscription(
+    sub: Subscription | None,
+    settings: Settings | None = None,
+    *,
+    devices_used: int | None = None,
+    devices: list[dict] | None = None,
+) -> dict | None:
     if not sub:
         return None
     settings = settings or get_settings()
@@ -91,7 +97,7 @@ def serialize_subscription(sub: Subscription | None, settings: Settings | None =
                 "is_active": plan.is_active,
                 "sort_order": plan.sort_order,
             }
-    return {
+    data = {
         "id": str(sub.id),
         "status": sub.status.value,
         "starts_at": sub.starts_at.isoformat() if sub.starts_at else None,
@@ -99,11 +105,38 @@ def serialize_subscription(sub: Subscription | None, settings: Settings | None =
         "traffic_limit_gb": sub.traffic_limit_gb,
         "traffic_used_gb": str(sub.traffic_used_gb),
         "device_limit": sub.device_limit,
+        "devices_used": devices_used if devices_used is not None else 0,
         "sub_url": sub_url,
         "happ_deep_link": build_happ_deep_link(sub_url),
         "happ_open_url": build_happ_open_url(sub.sub_token, settings),
         "plan": plan_data,
     }
+    if devices is not None:
+        data["devices"] = devices
+    return data
+
+
+async def serialize_subscription_with_devices(
+    db: AsyncSession,
+    sub: Subscription | None,
+    settings: Settings | None = None,
+    *,
+    include_devices: bool = False,
+) -> dict | None:
+    if not sub:
+        return None
+    from app.services.devices import active_device_count, list_devices, serialize_device
+
+    used = await active_device_count(db, sub.id)
+    devices_payload = None
+    if include_devices:
+        devices_payload = [serialize_device(d) for d in await list_devices(db, sub.id) if not d.is_blocked]
+    return serialize_subscription(
+        sub,
+        settings,
+        devices_used=used,
+        devices=devices_payload,
+    )
 
 
 async def create_trial(db: AsyncSession, user: User, settings: Settings | None = None) -> Subscription | None:
@@ -337,12 +370,32 @@ async def notify_subscription_ready(
     await send_telegram_message(int(user.telegram_id), text, settings=settings, reply_markup=markup)
 
 
+def _resolve_traffic_limit_gb(
+    *,
+    traffic_gb: int | None,
+    clear_traffic_limit: bool,
+    current: int | None = None,
+) -> int | None:
+    """Normalize admin traffic input.
+
+    - clear_traffic_limit / traffic_gb=0 → unlimited (None)
+    - traffic_gb > 0 → set that limit
+    - otherwise keep current (for updates) or None (for create)
+    """
+    if clear_traffic_limit or traffic_gb == 0:
+        return None
+    if traffic_gb is not None:
+        return traffic_gb
+    return current
+
+
 async def grant_subscription(
     db: AsyncSession,
     *,
     user: User,
     days: int,
     traffic_gb: int | None = None,
+    clear_traffic_limit: bool = False,
     device_limit: int | None = None,
     settings: Settings | None = None,
     notify: bool = False,
@@ -376,8 +429,12 @@ async def grant_subscription(
             base = active.ends_at if active.ends_at > _now() else _now()
         active.ends_at = base + timedelta(days=days)
         active.status = SubscriptionStatus.active
-        if traffic_gb is not None:
-            active.traffic_limit_gb = traffic_gb
+        if clear_traffic_limit or traffic_gb is not None:
+            active.traffic_limit_gb = _resolve_traffic_limit_gb(
+                traffic_gb=traffic_gb,
+                clear_traffic_limit=clear_traffic_limit,
+                current=active.traffic_limit_gb,
+            )
         if device_limit is not None:
             active.device_limit = device_limit
         active.reminder_sent = False
@@ -402,7 +459,11 @@ async def grant_subscription(
         status=SubscriptionStatus.active,
         starts_at=_now(),
         ends_at=_now() + timedelta(days=days),
-        traffic_limit_gb=traffic_gb,
+        traffic_limit_gb=_resolve_traffic_limit_gb(
+            traffic_gb=traffic_gb,
+            clear_traffic_limit=clear_traffic_limit,
+            current=None,
+        ),
         device_limit=device_limit or settings.default_device_limit,
     )
     db.add(sub)

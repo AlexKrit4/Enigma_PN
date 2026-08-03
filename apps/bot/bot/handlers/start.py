@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.api_client import ApiClient
 from bot.config import get_settings
 from bot.keyboards.common import (
+    devices_keyboard,
     format_subscription_card,
     main_menu,
     pay_keyboard,
@@ -18,8 +19,33 @@ router = Router()
 api = ApiClient()
 
 
-def _sub_keyboard(sub: dict):
+def _sub_keyboard(sub: dict | None):
+    if not sub:
+        return None
     return subscription_keyboard(sub.get("sub_url") or "", sub.get("happ_open_url") or "")
+
+
+def _devices_text(payload: dict) -> str:
+    used = payload.get("devices_used") or 0
+    limit = payload.get("device_limit") or "—"
+    devices = payload.get("devices") or []
+    lines = [
+        "📱 <b>Устройства подписки</b>",
+        "",
+        f"Занято: <b>{used}</b> / <b>{limit}</b>",
+        "",
+    ]
+    if not devices:
+        lines.append("Пока нет активных устройств.\nОткройте подписку в Happ — устройство появится здесь.")
+    else:
+        lines.append("Нажмите устройство, чтобы отключить его и освободить слот:")
+        for idx, device in enumerate(devices, start=1):
+            label = device.get("label") or "устройство"
+            last = device.get("last_seen_at") or ""
+            lines.append(f"{idx}. {label}")
+            if last:
+                lines.append(f"   последний раз: <code>{last}</code>")
+    return "\n".join(lines)
 
 
 @router.message(CommandStart())
@@ -111,6 +137,61 @@ async def show_sub_url(callback: CallbackQuery) -> None:
         "Ссылка подписки (если нужно добавить вручную):\n"
         f"<code>{sub['sub_url']}</code>",
         parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "devices:list")
+async def devices_list(callback: CallbackQuery) -> None:
+    user = callback.from_user
+    assert user and callback.message
+    data = await api.auth(user.id, user.username)
+    try:
+        payload = await api.list_devices(data["access_token"])
+    except Exception as exc:
+        await callback.answer(f"Ошибка: {exc}", show_alert=True)
+        return
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        _devices_text(payload),
+        parse_mode="HTML",
+        reply_markup=devices_keyboard(payload.get("devices") or []),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("devices:kick:"))
+async def devices_kick(callback: CallbackQuery) -> None:
+    user = callback.from_user
+    assert user and callback.data and callback.message
+    device_id = callback.data.rsplit(":", 1)[-1]
+    data = await api.auth(user.id, user.username)
+    token = data["access_token"]
+    try:
+        await api.kick_device(token, device_id)
+        payload = await api.list_devices(token)
+    except Exception as exc:
+        await callback.answer(f"Не удалось отключить: {exc}", show_alert=True)
+        return
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        "✅ Устройство отключено.\n\n" + _devices_text(payload),
+        parse_mode="HTML",
+        reply_markup=devices_keyboard(payload.get("devices") or []),
+    )
+    await callback.answer("Устройство отключено")
+
+
+@router.callback_query(F.data == "devices:back")
+async def devices_back(callback: CallbackQuery) -> None:
+    settings = get_settings()
+    user = callback.from_user
+    assert user and callback.message
+    data = await api.auth(user.id, user.username)
+    me = await api.me(data["access_token"])
+    sub = me.get("subscription")
+    await callback.message.edit_text(  # type: ignore[union-attr]
+        format_subscription_card(sub, brand=settings.brand_name),
+        parse_mode="HTML",
+        reply_markup=_sub_keyboard(sub),
     )
     await callback.answer()
 

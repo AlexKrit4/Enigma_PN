@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import subprocess
@@ -44,7 +45,6 @@ def _new_socks_username(user: User) -> str:
 
 
 def _new_socks_password() -> str:
-    # alphanumeric only — safe for 3proxy passwd format
     return secrets.token_hex(8)
 
 
@@ -78,36 +78,67 @@ def build_proxy_links(
         "port": str(port),
         "username": username,
         "password": password,
-        # keep secret alias empty so old UI never shows a shared MTProto secret
         "secret": "",
         "tg_url": f"tg://socks?{qs}",
         "https_url": f"https://t.me/socks?{qs}",
     }
 
 
-def write_socks_passwd(rows: list[ProxyAccess], settings: Settings | None = None) -> int:
+def _socks_dir(settings: Settings) -> Path:
+    return Path(settings.socks5_passwd_path).expanduser().resolve().parent
+
+
+def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None) -> int:
+    """Write sing-box SOCKS5 config with per-user auth (and legacy 3proxy passwd)."""
     settings = settings or get_settings()
-    path = Path(settings.socks5_passwd_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines: list[str] = []
+    directory = _socks_dir(settings)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    users: list[dict[str, str]] = []
+    passwd_lines: list[str] = []
     for row in rows:
-        user = (row.socks_username or "").replace(":", "").strip()
+        username = (row.socks_username or "").replace(":", "").strip()
         password = (row.socks_password or "").replace(":", "").strip()
-        if user and password:
-            lines.append(f"{user}:CL:{password}")
-    # 3proxy rejects an empty users file ("Illegal seek") — keep a disabled noop.
-    if not lines:
-        lines = ["_noop:CL:disabled"]
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    tmp.replace(path)
-    return len([ln for ln in lines if not ln.startswith("_noop:")])
+        if username and password:
+            users.append({"username": username, "password": password})
+            passwd_lines.append(f"{username}:CL:{password}")
+
+    # Never expose an open SOCKS without auth.
+    if not users:
+        noop_pass = secrets.token_hex(16)
+        users = [{"username": "_noop", "password": noop_pass}]
+        passwd_lines = [f"_noop:CL:{noop_pass}"]
+
+    config = {
+        "log": {"level": "info", "timestamp": True},
+        "inbounds": [
+            {
+                "type": "socks",
+                "tag": "socks-in",
+                "listen": "::",
+                "listen_port": int(settings.socks5_port),
+                "users": users,
+            }
+        ],
+        "outbounds": [{"type": "direct", "tag": "direct"}],
+    }
+
+    cfg_path = directory / "config.json"
+    tmp_cfg = cfg_path.with_suffix(".tmp")
+    tmp_cfg.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_cfg.replace(cfg_path)
+
+    passwd_path = Path(settings.socks5_passwd_path)
+    tmp_pw = passwd_path.with_suffix(".tmp")
+    tmp_pw.write_text("\n".join(passwd_lines) + "\n", encoding="utf-8")
+    tmp_pw.replace(passwd_path)
+
+    return len([u for u in users if u["username"] != "_noop"])
 
 
 def reload_socks_proxy(settings: Settings | None = None) -> None:
-    """Ask host watcher / docker to reload 3proxy (best-effort)."""
     settings = settings or get_settings()
-    stamp = Path(settings.socks5_passwd_path).with_name("passwd.reload")
+    stamp = _socks_dir(settings) / "passwd.reload"
     try:
         stamp.write_text(str(_now().timestamp()), encoding="utf-8")
     except OSError as exc:
@@ -115,15 +146,16 @@ def reload_socks_proxy(settings: Settings | None = None) -> None:
     name = (settings.socks5_container or "").strip()
     if not name:
         return
+    # sing-box picks up config on restart; SIGHUP is not enough for users list.
     try:
         subprocess.run(
-            ["docker", "kill", "-s", "HUP", name],
+            ["docker", "restart", name],
             check=False,
             capture_output=True,
-            timeout=10,
+            timeout=30,
         )
     except Exception as exc:  # noqa: BLE001
-        log.debug("socks5 docker HUP skipped: %s", exc)
+        log.debug("socks5 docker restart skipped: %s", exc)
 
 
 async def sync_socks_users(db: AsyncSession, settings: Settings | None = None) -> int:
@@ -138,7 +170,7 @@ async def sync_socks_users(db: AsyncSession, settings: Settings | None = None) -
         )
     )
     rows = list(result.scalars().all())
-    count = write_socks_passwd(rows, settings)
+    count = write_socks_config(rows, settings)
     reload_socks_proxy(settings)
     return count
 
@@ -227,7 +259,6 @@ async def grant_or_extend_proxy(
         if order_id:
             access.order_id = order_id
         access.updated_at = now
-        # rotate password when re-enabling a previously inactive account
         ensure_socks_credentials(access, user, rotate=was_inactive and bool(access.socks_password))
         await db.flush()
         await sync_socks_users(db)

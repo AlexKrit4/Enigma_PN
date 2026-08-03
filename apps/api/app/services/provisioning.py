@@ -67,21 +67,30 @@ def serialize_subscription(sub: Subscription | None, settings: Settings | None =
         return None
     settings = settings or get_settings()
     sub_url = build_sub_url(sub.sub_token, settings)
-    plan = sub.plan
     plan_data = None
-    if plan is not None:
-        plan_data = {
-            "id": str(plan.id),
-            "slug": plan.slug,
-            "name": plan.name,
-            "group_name": plan.group_name,
-            "duration_days": plan.duration_days,
-            "traffic_gb": plan.traffic_gb,
-            "device_limit": plan.device_limit,
-            "price_rub": str(plan.price_rub),
-            "is_active": plan.is_active,
-            "sort_order": plan.sort_order,
-        }
+    # Avoid async lazy-load of relationship outside greenlet context.
+    try:
+        from sqlalchemy import inspect as sa_inspect
+
+        state = sa_inspect(sub)
+        plan_loaded = "plan" not in state.unloaded
+    except Exception:
+        plan_loaded = False
+    if plan_loaded:
+        plan = sub.plan
+        if plan is not None:
+            plan_data = {
+                "id": str(plan.id),
+                "slug": plan.slug,
+                "name": plan.name,
+                "group_name": plan.group_name,
+                "duration_days": plan.duration_days,
+                "traffic_gb": plan.traffic_gb,
+                "device_limit": plan.device_limit,
+                "price_rub": str(plan.price_rub),
+                "is_active": plan.is_active,
+                "sort_order": plan.sort_order,
+            }
     return {
         "id": str(sub.id),
         "status": sub.status.value,

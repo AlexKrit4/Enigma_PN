@@ -93,16 +93,21 @@ async def _vpn_status(sub: Subscription | None, settings: Settings) -> dict | No
 async def _user_payload(db: AsyncSession, user: User, settings: Settings) -> dict:
     sub = await get_active_subscription(db, user.id)
     if not sub:
+        # Include disabled/expired so admin can still open revoked users.
         result = await db.execute(
             select(Subscription)
+            .options(selectinload(Subscription.plan))
             .where(Subscription.user_id == user.id)
             .order_by(Subscription.ends_at.desc())
             .limit(1)
         )
         sub = result.scalar_one_or_none()
-    vpn = await _vpn_status(sub if sub and sub.status in {SubscriptionStatus.active, SubscriptionStatus.trial} else sub, settings)
+    vpn = await _vpn_status(sub, settings)
     if sub and vpn and vpn.get("used_traffic_gb") is not None:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
     return {
         "user": {
             "id": str(user.id),

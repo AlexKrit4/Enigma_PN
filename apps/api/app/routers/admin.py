@@ -53,7 +53,7 @@ from app.services.provisioning import (
     update_subscription_limits,
 )
 from app.services.proxy import (
-    build_proxy_links,
+    count_active_proxy_users,
     get_proxy_access,
     grant_or_extend_proxy,
     proxy_configured,
@@ -459,18 +459,22 @@ async def revoke_user(
 
 @router.get("/proxy/info")
 async def proxy_info(
+    db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     _: None = Depends(require_admin_api),
 ) -> dict:
     configured = proxy_configured(settings)
-    payload: dict = {"configured": configured, "enabled": settings.mtproto_enabled}
+    payload: dict = {
+        "configured": configured,
+        "enabled": settings.socks5_enabled,
+        "type": "socks5",
+    }
     if configured:
-        links = build_proxy_links(settings)
         payload.update(
             {
-                "host": links["host"],
-                "port": links["port"],
-                "secret_preview": f"{links['secret'][:8]}…",
+                "host": settings.socks5_host,
+                "port": str(settings.socks5_port),
+                "active_users": await count_active_proxy_users(db),
             }
         )
     return payload
@@ -484,9 +488,9 @@ async def grant_proxy_user(
     settings: Settings = Depends(get_settings),
     _: None = Depends(require_admin_api),
 ) -> dict:
-    """Silent MTProto proxy grant/extend — no Telegram notify."""
+    """Silent SOCKS5 proxy grant/extend — no Telegram notify."""
     if not proxy_configured(settings):
-        raise HTTPException(status_code=503, detail="MTProto proxy is not configured on server")
+        raise HTTPException(status_code=503, detail="SOCKS5 proxy is not configured on server")
     user = await get_or_create_telegram_user(
         db, telegram_id, username=body.username, settings=settings
     )
@@ -511,7 +515,7 @@ async def revoke_proxy_user(
     settings: Settings = Depends(get_settings),
     _: None = Depends(require_admin_api),
 ) -> dict:
-    """Silent MTProto proxy revoke."""
+    """Silent SOCKS5 proxy revoke (removes login from 3proxy)."""
     result = await db.execute(select(User).where(User.telegram_id == telegram_id))
     user = result.scalar_one_or_none()
     if not user:

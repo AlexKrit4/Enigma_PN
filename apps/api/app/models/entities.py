@@ -211,7 +211,7 @@ class SubscriptionDevice(Base):
 
 
 class ProxyAccess(Base):
-    """Paid MTProto Telegram proxy access bound to one bot account (no device limit)."""
+    """Paid SOCKS5 Telegram proxy access bound to one bot account (per-user login)."""
 
     __tablename__ = "proxy_access"
     __table_args__ = (Index("ix_proxy_access_status_ends", "status", "ends_at"),)
@@ -226,6 +226,8 @@ class ProxyAccess(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True)
+    socks_username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    socks_password: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

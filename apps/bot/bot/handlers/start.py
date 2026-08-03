@@ -77,8 +77,8 @@ def _tariff_home_text() -> str:
         "<b>Ограниченный</b> — пакет ГБ на месяц, 3 устройства. "
         "Отключается, когда кончится трафик или срок.\n\n"
         "<b>Вечный</b> — без лимита трафика, только срок. 3 устройства.\n\n"
-        "<b>Прокси Telegram</b> — MTProto только для Telegram, "
-        "на ваш аккаунт в боте, без устройств. 70 ₽ / 30 дней.\n\n"
+        "<b>Прокси Telegram</b> — SOCKS5 только для Telegram, "
+        "личный логин на ваш аккаунт в боте. 70 ₽ / 30 дней.\n\n"
         "<b>Свой тариф</b> — сами выбираете ГБ, дни и устройства.\n"
         "Цена: 2 ₽/ГБ + 1 ₽/день + 25 ₽/устройство.\n"
         "Вечный трафик в своём тарифе недоступен."
@@ -194,10 +194,10 @@ async def cb_tarif_proxy(callback: CallbackQuery, state: FSMContext) -> None:
     assert callback.message
     plans = await _plans_by_group("прокси")
     text = (
-        "🔌 <b>MTProto прокси для Telegram</b>\n\n"
+        "🔌 <b>SOCKS5 прокси для Telegram</b>\n\n"
         "Только Telegram, без VPN на весь интернет.\n"
-        "Действует на <b>аккаунт покупателя</b> в боте.\n"
-        "Лимита устройств нет — это не Happ-подписка.\n\n"
+        "Личный логин и пароль на <b>аккаунт покупателя</b> в боте.\n"
+        "После отключения логин перестаёт работать.\n\n"
         "После оплаты данные появятся в «🔌 Прокси»."
     )
     await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
@@ -546,7 +546,7 @@ async def cmd_help(message: Message, state: FSMContext) -> None:
         "3. Нажмите «🚀 Открыть в Happ» — подписка добавится сама\n"
         "4. В Happ обновите подписку и включите сервер Finland\n\n"
         "Тарифы: ограниченный / вечный / прокси Telegram / свой.\n"
-        "Прокси: раздел «🔌 Прокси» — MTProto только для Telegram.\n"
+        "Прокси: раздел «🔌 Прокси» — SOCKS5 только для Telegram.\n"
         f"Сайт: https://{get_settings().domain}"
     )
     await message.answer(text)

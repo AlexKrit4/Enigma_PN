@@ -185,23 +185,26 @@ def proxy_keyboard(proxy: dict | None = None, *, buy_plan_id: str | None = None)
 def format_proxy_card(proxy: dict | None) -> str:
     if not proxy or not proxy.get("active"):
         return (
-            "🔌 <b>MTProto прокси</b>\n\n"
+            "🔌 <b>SOCKS5 прокси</b>\n\n"
             "Сейчас доступа нет.\n"
-            "Прокси привязан к <b>вашему аккаунту</b> в боте (без лимита устройств).\n"
+            "Прокси привязан к <b>вашему аккаунту</b> в боте "
+            "(личный логин и пароль).\n"
             "Тариф: <b>70 ₽ / 30 дней</b>."
         )
     ends = format_ru_date(proxy.get("ends_at"))
     host = escape(str(proxy.get("host") or ""))
     port = escape(str(proxy.get("port") or ""))
-    secret = escape(str(proxy.get("secret") or ""))
+    username = escape(str(proxy.get("username") or ""))
+    password = escape(str(proxy.get("password") or ""))
     return (
-        "🔌 <b>MTProto прокси активен</b>\n\n"
+        "🔌 <b>SOCKS5 прокси активен</b>\n\n"
         f"До: <b>{ends}</b>\n"
         f"Сервер: <code>{host}</code>\n"
         f"Порт: <code>{port}</code>\n"
-        f"Secret: <code>{secret}</code>\n\n"
-        "Нажмите кнопку ниже — Telegram добавит прокси сам.\n"
-        "Доступ действует на аккаунт, который купил тариф."
+        f"Логин: <code>{username}</code>\n"
+        f"Пароль: <code>{password}</code>\n\n"
+        "Нажмите кнопку ниже — Telegram добавит SOCKS5 сам.\n"
+        "Это ваш личный логин: после отключения он перестанет работать."
     )
 
 
@@ -249,16 +252,16 @@ def _format_proxy_block(proxy: dict | None) -> str:
     ends = format_ru_date(proxy.get("ends_at"))
     host = escape(str(proxy.get("host") or ""))
     port = escape(str(proxy.get("port") or ""))
-    secret = escape(str(proxy.get("secret") or ""))
-    https_url = escape(str(proxy.get("https_url") or ""))
+    username = escape(str(proxy.get("username") or ""))
+    password = escape(str(proxy.get("password") or ""))
     return (
-        "\n\n🔌 <b>MTProto прокси</b>\n"
+        "\n\n🔌 <b>SOCKS5 прокси</b>\n"
         f"До: <b>{ends}</b>\n"
         f"Сервер: <code>{host}</code>\n"
         f"Порт: <code>{port}</code>\n"
-        f"Secret: <code>{secret}</code>\n"
-        f"Ссылка: <code>{https_url}</code>\n"
-        "Кнопка ниже добавит прокси в Telegram."
+        f"Логин: <code>{username}</code>\n"
+        f"Пароль: <code>{password}</code>\n"
+        "Кнопка ниже добавит SOCKS5 в Telegram."
     )
 
 

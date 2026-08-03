@@ -447,7 +447,7 @@ export default function AdminPage() {
 
       {tab === "proxy" && (
         <div className="grid gap-4 md:grid-cols-2">
-          <Card title="MTProto на сервере">
+          <Card title="SOCKS5 на сервере">
             <pre className="overflow-auto whitespace-pre-wrap text-sm text-white/80">{pre(proxyInfo)}</pre>
             <div className="mt-3">
               <Btn onClick={loadProxyInfo}>Обновить</Btn>

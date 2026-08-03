@@ -1092,13 +1092,13 @@ async def cb_proxy_menu(callback: CallbackQuery, state: FSMContext) -> None:
         info = {"configured": False, "error": str(exc)}
     cfg = "да" if info.get("configured") else "нет"
     text = (
-        "🔌 <b>MTProto прокси</b>\n\n"
+        "🔌 <b>SOCKS5 прокси</b>\n\n"
         f"На сервере настроен: <b>{cfg}</b>\n"
         f"Host: <code>{html.escape(str(info.get('host') or '—'))}</code>\n"
         f"Port: <code>{html.escape(str(info.get('port') or '—'))}</code>\n"
-        f"Secret: <code>{html.escape(str(info.get('secret_preview') or '—'))}</code>\n\n"
+        f"Активных логинов: <b>{html.escape(str(info.get('active_users', '—')))}</b>\n\n"
         "Выдача/продление/отключение — <b>без уведомления</b> пользователю.\n"
-        "Доступ привязан к аккаунту в боте."
+        "У каждого аккаунта свой логин и пароль."
     )
     await callback.message.edit_text(text, reply_markup=proxy_admin_keyboard())
     await callback.answer()
@@ -1316,9 +1316,11 @@ async def cb_do_action(callback: CallbackQuery, state: FSMContext) -> None:
             )
             proxy = result.get("proxy") or {}
             text = (
-                f"✅ Прокси до <b>{html.escape(str(result.get('ends_at')))}</b>\n"
+                f"✅ SOCKS5 до <b>{html.escape(str(result.get('ends_at')))}</b>\n"
                 f"Host: <code>{html.escape(str(proxy.get('host') or ''))}</code>\n"
                 f"Port: <code>{html.escape(str(proxy.get('port') or ''))}</code>\n"
+                f"Login: <code>{html.escape(str(proxy.get('username') or ''))}</code>\n"
+                f"Pass: <code>{html.escape(str(proxy.get('password') or ''))}</code>\n"
                 f"Увед юзеру: нет\nКто: {_who(callback.from_user)}"
             )
         elif action == "proxy_revoke":

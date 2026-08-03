@@ -41,6 +41,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: >
       sh -c "alembic upgrade head &&
              python -m app.seed &&
@@ -60,6 +61,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: arq app.workers.settings.WorkerSettings
 
   bot:

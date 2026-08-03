@@ -61,7 +61,9 @@ class ProxyOut(BaseModel):
     title: str | None = None
     host: str | None = None
     port: str | None = None
-    secret: str | None = None
+    username: str | None = None
+    password: str | None = None
+    secret: str | None = None  # legacy MTProto field; unused for SOCKS5
     tg_url: str | None = None
     https_url: str | None = None
 

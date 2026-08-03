@@ -58,7 +58,14 @@ class Settings(BaseSettings):
     happ_provider_id: str = ""
     happ_profile_title: str = "Enigma_PN"
 
-    # Shared MTProto proxy (Telegram) — access gated by ProxyAccess per account
+    # SOCKS5 Telegram proxy — per-account username/password in ProxyAccess
+    socks5_enabled: bool = False
+    socks5_host: str = "bigwinzone.ru"
+    socks5_port: int = 40080
+    socks5_passwd_path: str = "/opt/socks5/passwd"
+    socks5_container: str = "socks5"
+
+    # Legacy MTProto env names (ignored for delivery; kept so old .env does not crash)
     mtproto_enabled: bool = False
     mtproto_host: str = "bigwinzone.ru"
     mtproto_port: int = 443

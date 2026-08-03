@@ -52,10 +52,12 @@ async def cmd_start(message: Message) -> None:
     text += _fmt_sub(sub)
     kb = main_menu()
     await message.answer(text, reply_markup=kb, parse_mode="HTML")
-    if sub and sub.get("happ_deep_link"):
+    if sub and sub.get("sub_url"):
         await message.answer(
-            "Подключитесь в Happ:",
-            reply_markup=subscription_keyboard(sub["sub_url"], sub["happ_deep_link"]),
+            "Подключитесь в Happ (импорт URL):\n"
+            f"<code>{sub.get('happ_deep_link') or sub['sub_url']}</code>",
+            reply_markup=subscription_keyboard(sub["sub_url"], sub.get("happ_deep_link") or ""),
+            parse_mode="HTML",
         )
 
 
@@ -96,10 +98,12 @@ async def cmd_mysub(message: Message) -> None:
     me = await api.me(token)
     sub = me.get("subscription")
     await message.answer(_fmt_sub(sub), parse_mode="HTML")
-    if sub and sub.get("happ_deep_link"):
+    if sub and sub.get("sub_url"):
         await message.answer(
-            "Быстрое подключение:",
-            reply_markup=subscription_keyboard(sub["sub_url"], sub["happ_deep_link"]),
+            "Быстрое подключение (импорт в Happ):\n"
+            f"<code>{sub.get('happ_deep_link') or sub['sub_url']}</code>",
+            reply_markup=subscription_keyboard(sub["sub_url"], sub.get("happ_deep_link") or ""),
+            parse_mode="HTML",
         )
 
 

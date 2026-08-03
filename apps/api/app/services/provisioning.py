@@ -267,14 +267,16 @@ async def notify_subscription_ready(
         f"До: <b>{sub.ends_at.isoformat()}</b>\n"
         f"Трафик: {sub.traffic_used_gb} / {sub.traffic_limit_gb if sub.traffic_limit_gb is not None else '∞'} GB\n"
         f"Устройств: {sub.device_limit}\n\n"
-        f"Ссылка подписки:\n<code>{sub_url}</code>"
+        f"Ссылка подписки:\n<code>{sub_url}</code>\n\n"
+        f"Happ deep link:\n<code>{happ}</code>\n\n"
+        "Откройте Happ → + → Импорт из URL и вставьте ссылку."
     )
+    # Telegram inline URL buttons support only http/https (not happ://)
     markup = None
-    if happ:
+    if sub_url.startswith("http"):
         markup = {
             "inline_keyboard": [
-                [{"text": "🚀 Добавить в Happ", "url": happ}],
-                [{"text": "📋 Скопировать URL", "callback_data": "show_sub_url"}],
+                [{"text": "🔗 Открыть subscription URL", "url": sub_url}],
             ]
         }
     await send_telegram_message(int(user.telegram_id), text, settings=settings, reply_markup=markup)

@@ -73,10 +73,10 @@ PLANS = [
         "price_rub": "800.00",
         "sort_order": 60,
     },
-    # SOCKS5 прокси для Telegram — логин/пароль на аккаунт покупателя
+    # Прокси для Telegram (MTProto FakeTLS / SOCKS5 — что включено на сервере)
     {
         "slug": "proxy-1m",
-        "name": "SOCKS5 прокси — 1 месяц",
+        "name": "Прокси Telegram — 1 месяц",
         "group_name": "прокси",
         "duration_days": 30,
         "traffic_gb": None,

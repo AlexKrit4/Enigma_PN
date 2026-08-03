@@ -1091,14 +1091,14 @@ async def cb_proxy_menu(callback: CallbackQuery, state: FSMContext) -> None:
     except Exception as exc:
         info = {"configured": False, "error": str(exc)}
     cfg = "да" if info.get("configured") else "нет"
+    mode = html.escape(str(info.get("type") or "—"))
     text = (
-        "🔌 <b>SOCKS5 прокси</b>\n\n"
+        f"🔌 <b>Прокси</b> (<code>{mode}</code>)\n\n"
         f"На сервере настроен: <b>{cfg}</b>\n"
         f"Host: <code>{html.escape(str(info.get('host') or '—'))}</code>\n"
         f"Port: <code>{html.escape(str(info.get('port') or '—'))}</code>\n"
-        f"Активных логинов: <b>{html.escape(str(info.get('active_users', '—')))}</b>\n\n"
-        "Выдача/продление/отключение — <b>без уведомления</b> пользователю.\n"
-        "У каждого аккаунта свой логин и пароль."
+        f"Активных: <b>{html.escape(str(info.get('active_users', '—')))}</b>\n\n"
+        "Выдача/продление/отключение — <b>без уведомления</b> пользователю."
     )
     await callback.message.edit_text(text, reply_markup=proxy_admin_keyboard())
     await callback.answer()

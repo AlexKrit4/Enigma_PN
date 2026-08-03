@@ -33,9 +33,29 @@ def is_proxy_kind(plan: Plan | None, meta: dict | None = None) -> bool:
     return kind_l in {"прокси", "proxy", "mtproto", "socks", "socks5"}
 
 
-def proxy_configured(settings: Settings | None = None) -> bool:
+def socks_configured(settings: Settings | None = None) -> bool:
     settings = settings or get_settings()
     return bool(settings.socks5_enabled and settings.socks5_host and settings.socks5_port)
+
+
+def mtproto_configured(settings: Settings | None = None) -> bool:
+    settings = settings or get_settings()
+    return bool(settings.mtproto_enabled and settings.mtproto_host and settings.mtproto_secret and settings.mtproto_port)
+
+
+def proxy_configured(settings: Settings | None = None) -> bool:
+    """True if any delivery backend is ready (prefer SOCKS5, else MTProto FakeTLS)."""
+    settings = settings or get_settings()
+    return socks_configured(settings) or mtproto_configured(settings)
+
+
+def proxy_mode(settings: Settings | None = None) -> str:
+    settings = settings or get_settings()
+    if socks_configured(settings):
+        return "socks5"
+    if mtproto_configured(settings):
+        return "mtproto"
+    return "none"
 
 
 def _new_socks_username(user: User) -> str:
@@ -49,7 +69,6 @@ def _new_socks_password() -> str:
 
 
 def ensure_socks_credentials(access: ProxyAccess, user: User, *, rotate: bool = False) -> bool:
-    """Ensure access has SOCKS login. Returns True if credentials changed."""
     changed = False
     if not access.socks_username:
         access.socks_username = _new_socks_username(user)
@@ -60,7 +79,7 @@ def ensure_socks_credentials(access: ProxyAccess, user: User, *, rotate: bool = 
     return changed
 
 
-def build_proxy_links(
+def build_socks_links(
     *,
     username: str,
     password: str,
@@ -74,6 +93,7 @@ def build_proxy_links(
         f"&user={quote(username)}&pass={quote(password)}"
     )
     return {
+        "mode": "socks5",
         "host": host,
         "port": str(port),
         "username": username,
@@ -84,13 +104,44 @@ def build_proxy_links(
     }
 
 
+def build_mtproto_links(settings: Settings | None = None) -> dict[str, str]:
+    settings = settings or get_settings()
+    host = settings.mtproto_host
+    port = int(settings.mtproto_port)
+    secret = settings.mtproto_secret
+    qs = f"server={quote(host)}&port={port}&secret={quote(secret)}"
+    return {
+        "mode": "mtproto",
+        "host": host,
+        "port": str(port),
+        "username": "",
+        "password": "",
+        "secret": secret,
+        "tg_url": f"tg://proxy?{qs}",
+        "https_url": f"https://t.me/proxy?{qs}",
+    }
+
+
+# Back-compat alias used by older admin imports
+def build_proxy_links(*args, **kwargs):  # type: ignore[no-untyped-def]
+    settings = kwargs.get("settings") or get_settings()
+    if socks_configured(settings) and kwargs.get("username") and kwargs.get("password"):
+        return build_socks_links(
+            username=kwargs["username"],
+            password=kwargs["password"],
+            settings=settings,
+        )
+    return build_mtproto_links(settings)
+
+
 def _socks_dir(settings: Settings) -> Path:
     return Path(settings.socks5_passwd_path).expanduser().resolve().parent
 
 
 def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None) -> int:
-    """Write sing-box SOCKS5 config with per-user auth (and legacy 3proxy passwd)."""
     settings = settings or get_settings()
+    if not socks_configured(settings):
+        return 0
     directory = _socks_dir(settings)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -103,7 +154,6 @@ def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None
             users.append({"username": username, "password": password})
             passwd_lines.append(f"{username}:CL:{password}")
 
-    # Never expose an open SOCKS without auth.
     if not users:
         noop_pass = secrets.token_hex(16)
         users = [{"username": "_noop", "password": noop_pass}]
@@ -137,8 +187,9 @@ def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None
 
 
 def reload_socks_proxy(settings: Settings | None = None) -> None:
-    """Touch reload stamp so host /opt/socks5/watch.sh restarts sing-box."""
     settings = settings or get_settings()
+    if not socks_configured(settings):
+        return
     stamp = _socks_dir(settings) / "passwd.reload"
     try:
         stamp.write_text(str(_now().timestamp()), encoding="utf-8")
@@ -147,7 +198,6 @@ def reload_socks_proxy(settings: Settings | None = None) -> None:
     name = (settings.socks5_container or "").strip()
     if not name:
         return
-    # Optional: if docker CLI is available on the host-mounted environment.
     try:
         subprocess.run(
             ["docker", "restart", name],
@@ -161,7 +211,7 @@ def reload_socks_proxy(settings: Settings | None = None) -> None:
 
 async def sync_socks_users(db: AsyncSession, settings: Settings | None = None) -> int:
     settings = settings or get_settings()
-    if not proxy_configured(settings):
+    if not socks_configured(settings):
         return 0
     now = _now()
     result = await db.execute(
@@ -207,6 +257,8 @@ def serialize_proxy_access(
         return None
     settings = settings or get_settings()
     active = access.status == SubscriptionStatus.active and access.ends_at > _now()
+    mode = proxy_mode(settings)
+    title = "SOCKS5 прокси" if mode == "socks5" else "MTProto прокси"
     data: dict = {
         "id": str(access.id),
         "status": access.status.value if active else (
@@ -215,22 +267,20 @@ def serialize_proxy_access(
         "starts_at": access.starts_at.isoformat() if access.starts_at else None,
         "ends_at": access.ends_at.isoformat() if access.ends_at else None,
         "active": active,
-        "title": "SOCKS5 прокси",
+        "title": title,
+        "mode": mode,
     }
-    if (
-        include_credentials
-        and active
-        and proxy_configured(settings)
-        and access.socks_username
-        and access.socks_password
-    ):
-        data.update(
-            build_proxy_links(
-                username=access.socks_username,
-                password=access.socks_password,
-                settings=settings,
+    if include_credentials and active and proxy_configured(settings):
+        if mode == "socks5" and access.socks_username and access.socks_password:
+            data.update(
+                build_socks_links(
+                    username=access.socks_username,
+                    password=access.socks_password,
+                    settings=settings,
+                )
             )
-        )
+        elif mode == "mtproto":
+            data.update(build_mtproto_links(settings))
     return data
 
 
@@ -260,7 +310,8 @@ async def grant_or_extend_proxy(
         if order_id:
             access.order_id = order_id
         access.updated_at = now
-        ensure_socks_credentials(access, user, rotate=was_inactive and bool(access.socks_password))
+        if socks_configured():
+            ensure_socks_credentials(access, user, rotate=was_inactive and bool(access.socks_password))
         await db.flush()
         await sync_socks_users(db)
         return access
@@ -272,7 +323,8 @@ async def grant_or_extend_proxy(
         ends_at=now + timedelta(days=days),
         order_id=order_id,
     )
-    ensure_socks_credentials(access, user, rotate=True)
+    if socks_configured():
+        ensure_socks_credentials(access, user, rotate=True)
     db.add(access)
     await db.flush()
     await sync_socks_users(db)
@@ -305,12 +357,19 @@ async def notify_proxy_ready(
     data = serialize_proxy_access(access, settings, include_credentials=True) or {}
     ends = access.ends_at
     ends_label = f"{ends.day:02d}.{ends.month:02d}.{ends.year}"
+    mode = data.get("mode") or proxy_mode(settings)
+    tariff = "SOCKS5 прокси" if mode == "socks5" else "MTProto прокси"
+    extra = ""
+    if mode == "socks5":
+        extra = (
+            f"Логин: <code>{data.get('username') or '—'}</code>\n"
+            f"Пароль: <code>{data.get('password') or '—'}</code>\n\n"
+        )
     text = (
         f"✅ <b>{title}</b>\n\n"
-        f"Тариф: <b>SOCKS5 прокси</b>\n"
+        f"Тариф: <b>{tariff}</b>\n"
         f"Действует до: <b>{ends_label}</b>\n"
-        f"Логин: <code>{data.get('username') or '—'}</code>\n"
-        f"Пароль: <code>{data.get('password') or '—'}</code>\n\n"
+        f"{extra}"
         "Откройте раздел «🔌 Прокси» или нажмите кнопку ниже."
     )
     markup = None

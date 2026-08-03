@@ -185,26 +185,36 @@ def proxy_keyboard(proxy: dict | None = None, *, buy_plan_id: str | None = None)
 def format_proxy_card(proxy: dict | None) -> str:
     if not proxy or not proxy.get("active"):
         return (
-            "🔌 <b>SOCKS5 прокси</b>\n\n"
+            "🔌 <b>Прокси для Telegram</b>\n\n"
             "Сейчас доступа нет.\n"
-            "Прокси привязан к <b>вашему аккаунту</b> в боте "
-            "(личный логин и пароль).\n"
+            "Прокси привязан к <b>вашему аккаунту</b> в боте.\n"
             "Тариф: <b>70 ₽ / 30 дней</b>."
         )
     ends = format_ru_date(proxy.get("ends_at"))
     host = escape(str(proxy.get("host") or ""))
     port = escape(str(proxy.get("port") or ""))
-    username = escape(str(proxy.get("username") or ""))
-    password = escape(str(proxy.get("password") or ""))
+    mode = str(proxy.get("mode") or "")
+    if mode == "socks5" or proxy.get("username"):
+        username = escape(str(proxy.get("username") or ""))
+        password = escape(str(proxy.get("password") or ""))
+        return (
+            "🔌 <b>SOCKS5 прокси активен</b>\n\n"
+            f"До: <b>{ends}</b>\n"
+            f"Сервер: <code>{host}</code>\n"
+            f"Порт: <code>{port}</code>\n"
+            f"Логин: <code>{username}</code>\n"
+            f"Пароль: <code>{password}</code>\n\n"
+            "Нажмите кнопку ниже — Telegram добавит SOCKS5 сам."
+        )
+    secret = escape(str(proxy.get("secret") or ""))
     return (
-        "🔌 <b>SOCKS5 прокси активен</b>\n\n"
+        "🔌 <b>MTProto прокси активен</b>\n\n"
         f"До: <b>{ends}</b>\n"
         f"Сервер: <code>{host}</code>\n"
         f"Порт: <code>{port}</code>\n"
-        f"Логин: <code>{username}</code>\n"
-        f"Пароль: <code>{password}</code>\n\n"
-        "Нажмите кнопку ниже — Telegram добавит SOCKS5 сам.\n"
-        "Это ваш личный логин: после отключения он перестанет работать."
+        f"Secret: <code>{secret}</code>\n\n"
+        "Нажмите кнопку ниже — Telegram добавит прокси сам.\n"
+        "Важно: удалите старый SOCKS/прокси перед добавлением."
     )
 
 
@@ -252,16 +262,27 @@ def _format_proxy_block(proxy: dict | None) -> str:
     ends = format_ru_date(proxy.get("ends_at"))
     host = escape(str(proxy.get("host") or ""))
     port = escape(str(proxy.get("port") or ""))
-    username = escape(str(proxy.get("username") or ""))
-    password = escape(str(proxy.get("password") or ""))
+    mode = str(proxy.get("mode") or "")
+    if mode == "socks5" or proxy.get("username"):
+        username = escape(str(proxy.get("username") or ""))
+        password = escape(str(proxy.get("password") or ""))
+        return (
+            "\n\n🔌 <b>SOCKS5 прокси</b>\n"
+            f"До: <b>{ends}</b>\n"
+            f"Сервер: <code>{host}</code>\n"
+            f"Порт: <code>{port}</code>\n"
+            f"Логин: <code>{username}</code>\n"
+            f"Пароль: <code>{password}</code>\n"
+            "Кнопка ниже добавит SOCKS5 в Telegram."
+        )
+    secret = escape(str(proxy.get("secret") or ""))
     return (
-        "\n\n🔌 <b>SOCKS5 прокси</b>\n"
+        "\n\n🔌 <b>MTProto прокси</b>\n"
         f"До: <b>{ends}</b>\n"
         f"Сервер: <code>{host}</code>\n"
         f"Порт: <code>{port}</code>\n"
-        f"Логин: <code>{username}</code>\n"
-        f"Пароль: <code>{password}</code>\n"
-        "Кнопка ниже добавит SOCKS5 в Telegram."
+        f"Secret: <code>{secret}</code>\n"
+        "Кнопка ниже добавит прокси в Telegram."
     )
 
 

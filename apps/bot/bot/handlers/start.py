@@ -194,10 +194,9 @@ async def cb_tarif_proxy(callback: CallbackQuery, state: FSMContext) -> None:
     assert callback.message
     plans = await _plans_by_group("прокси")
     text = (
-        "🔌 <b>SOCKS5 прокси для Telegram</b>\n\n"
+        "🔌 <b>Прокси для Telegram</b>\n\n"
         "Только Telegram, без VPN на весь интернет.\n"
-        "Личный логин и пароль на <b>аккаунт покупателя</b> в боте.\n"
-        "После отключения логин перестаёт работать.\n\n"
+        "Действует на <b>аккаунт покупателя</b> в боте.\n\n"
         "После оплаты данные появятся в «🔌 Прокси»."
     )
     await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")

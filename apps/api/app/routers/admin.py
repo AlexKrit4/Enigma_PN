@@ -463,18 +463,24 @@ async def proxy_info(
     settings: Settings = Depends(get_settings),
     _: None = Depends(require_admin_api),
 ) -> dict:
+    from app.services.proxy import mtproto_configured, proxy_mode, socks_configured
+
     configured = proxy_configured(settings)
+    mode = proxy_mode(settings)
     payload: dict = {
         "configured": configured,
-        "enabled": settings.socks5_enabled,
-        "type": "socks5",
+        "enabled": configured,
+        "type": mode,
+        "active_users": await count_active_proxy_users(db),
     }
-    if configured:
+    if mode == "socks5" and socks_configured(settings):
+        payload.update({"host": settings.socks5_host, "port": str(settings.socks5_port)})
+    elif mode == "mtproto" and mtproto_configured(settings):
         payload.update(
             {
-                "host": settings.socks5_host,
-                "port": str(settings.socks5_port),
-                "active_users": await count_active_proxy_users(db),
+                "host": settings.mtproto_host,
+                "port": str(settings.mtproto_port),
+                "secret_preview": f"{settings.mtproto_secret[:10]}…",
             }
         )
     return payload
@@ -490,7 +496,7 @@ async def grant_proxy_user(
 ) -> dict:
     """Silent SOCKS5 proxy grant/extend — no Telegram notify."""
     if not proxy_configured(settings):
-        raise HTTPException(status_code=503, detail="SOCKS5 proxy is not configured on server")
+        raise HTTPException(status_code=503, detail="Proxy is not configured on server")
     user = await get_or_create_telegram_user(
         db, telegram_id, username=body.username, settings=settings
     )

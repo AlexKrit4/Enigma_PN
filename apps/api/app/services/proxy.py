@@ -115,8 +115,8 @@ def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None
             {
                 "type": "socks",
                 "tag": "socks-in",
-                "listen": "::",
-                "listen_port": int(settings.socks5_port),
+                "listen": settings.socks5_listen_host or "127.0.0.1",
+                "listen_port": int(settings.socks5_listen_port or 40080),
                 "users": users,
             }
         ],
@@ -137,6 +137,7 @@ def write_socks_config(rows: list[ProxyAccess], settings: Settings | None = None
 
 
 def reload_socks_proxy(settings: Settings | None = None) -> None:
+    """Touch reload stamp so host /opt/socks5/watch.sh restarts sing-box."""
     settings = settings or get_settings()
     stamp = _socks_dir(settings) / "passwd.reload"
     try:
@@ -146,7 +147,7 @@ def reload_socks_proxy(settings: Settings | None = None) -> None:
     name = (settings.socks5_container or "").strip()
     if not name:
         return
-    # sing-box picks up config on restart; SIGHUP is not enough for users list.
+    # Optional: if docker CLI is available on the host-mounted environment.
     try:
         subprocess.run(
             ["docker", "restart", name],

@@ -59,9 +59,13 @@ class Settings(BaseSettings):
     happ_profile_title: str = "Enigma_PN"
 
     # SOCKS5 Telegram proxy — per-account username/password in ProxyAccess
+    # socks5_port = public port in tg://socks links (often 443 behind HAProxy)
+    # socks5_listen_port = local sing-box bind (default 40080 on 127.0.0.1)
     socks5_enabled: bool = False
     socks5_host: str = "bigwinzone.ru"
-    socks5_port: int = 40080
+    socks5_port: int = 443
+    socks5_listen_host: str = "127.0.0.1"
+    socks5_listen_port: int = 40080
     socks5_passwd_path: str = "/opt/socks5/passwd"
     socks5_container: str = "socks5"
 

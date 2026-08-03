@@ -195,9 +195,10 @@ async def cb_tarif_proxy(callback: CallbackQuery, state: FSMContext) -> None:
     plans = await _plans_by_group("прокси")
     text = (
         "🔌 <b>Прокси для Telegram</b>\n\n"
-        "Только Telegram, без VPN на весь интернет.\n"
-        "Действует на <b>аккаунт покупателя</b> в боте.\n\n"
-        "После оплаты данные появятся в «🔌 Прокси»."
+        "Встроенный прокси Telegram на многих сетях РФ "
+        "после ping блокируется (DPI).\n"
+        "Если так — используйте VPN в Happ.\n\n"
+        "Тариф: 70 ₽ / 30 дней, на аккаунт в боте."
     )
     await callback.message.edit_text(text, reply_markup=plans_keyboard(plans), parse_mode="HTML")
     await callback.answer()
@@ -212,10 +213,15 @@ async def cmd_proxy(message: Message, state: FSMContext) -> None:
     data = await api.auth(user.id, user.username)
     me = await api.me(data["access_token"])
     proxy = me.get("proxy")
+    sub = me.get("subscription")
     plan_id = await _proxy_plan_id()
     await message.answer(
         format_proxy_card(proxy),
-        reply_markup=proxy_keyboard(proxy, buy_plan_id=plan_id),
+        reply_markup=proxy_keyboard(
+            proxy,
+            buy_plan_id=plan_id,
+            happ_open_url=(sub or {}).get("happ_open_url") or "",
+        ),
         parse_mode="HTML",
     )
 

@@ -171,13 +171,21 @@ def pay_keyboard(payment_url: str) -> InlineKeyboardMarkup:
     )
 
 
-def proxy_keyboard(proxy: dict | None = None, *, buy_plan_id: str | None = None) -> InlineKeyboardMarkup:
+def proxy_keyboard(
+    proxy: dict | None = None,
+    *,
+    buy_plan_id: str | None = None,
+    happ_open_url: str = "",
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    if happ_open_url.startswith("http"):
+        rows.append([InlineKeyboardButton(text="🚀 Открыть в Happ (рекомендуем)", url=happ_open_url)])
     https_url = (proxy or {}).get("https_url") or ""
     if proxy and proxy.get("active") and https_url.startswith("http"):
-        rows.append([InlineKeyboardButton(text="🔌 Добавить в Telegram", url=https_url)])
+        rows.append([InlineKeyboardButton(text="🔌 Всё равно добавить в Telegram", url=https_url)])
     if buy_plan_id:
         rows.append([InlineKeyboardButton(text="💳 Купить / продлить — 70 ₽", callback_data=f"buy:{buy_plan_id}")])
+    rows.append([InlineKeyboardButton(text="📱 Моя подписка", callback_data="devices:back")])
     rows.append([InlineKeyboardButton(text="🛒 Все тарифы", callback_data="tarif:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -186,14 +194,23 @@ def format_proxy_card(proxy: dict | None) -> str:
     if not proxy or not proxy.get("active"):
         return (
             "🔌 <b>Прокси для Telegram</b>\n\n"
-            "Сейчас доступа нет.\n"
-            "Прокси привязан к <b>вашему аккаунту</b> в боте.\n"
-            "Тариф: <b>70 ₽ / 30 дней</b>."
+            "Сейчас доступа нет.\n\n"
+            "На многих сетях в РФ встроенный прокси Telegram "
+            "(MTProto/SOCKS) после ping режется DPI: сначала ~100–200 мс, "
+            "потом «недоступен».\n\n"
+            "Стабильный путь — VPN в Happ (Reality).\n"
+            "Тариф прокси: <b>70 ₽ / 30 дней</b>."
         )
     ends = format_ru_date(proxy.get("ends_at"))
     host = escape(str(proxy.get("host") or ""))
     port = escape(str(proxy.get("port") or ""))
     mode = str(proxy.get("mode") or "")
+    dpi_note = (
+        "\n\n⚠️ На части сетей РФ бывает так: в превью ping есть, "
+        "после включения прокси становится «недоступен» — это DPI, "
+        "не поломка сервера.\n"
+        "Надёжнее: удалите прокси в Telegram и откройте Telegram через Happ."
+    )
     if mode == "socks5" or proxy.get("username"):
         username = escape(str(proxy.get("username") or ""))
         password = escape(str(proxy.get("password") or ""))
@@ -203,8 +220,8 @@ def format_proxy_card(proxy: dict | None) -> str:
             f"Сервер: <code>{host}</code>\n"
             f"Порт: <code>{port}</code>\n"
             f"Логин: <code>{username}</code>\n"
-            f"Пароль: <code>{password}</code>\n\n"
-            "Нажмите кнопку ниже — Telegram добавит SOCKS5 сам."
+            f"Пароль: <code>{password}</code>"
+            f"{dpi_note}"
         )
     secret = escape(str(proxy.get("secret") or ""))
     return (
@@ -212,9 +229,8 @@ def format_proxy_card(proxy: dict | None) -> str:
         f"До: <b>{ends}</b>\n"
         f"Сервер: <code>{host}</code>\n"
         f"Порт: <code>{port}</code>\n"
-        f"Secret: <code>{secret}</code>\n\n"
-        "Нажмите кнопку ниже — Telegram добавит прокси сам.\n"
-        "Важно: удалите старый SOCKS/прокси перед добавлением."
+        f"Secret: <code>{secret}</code>"
+        f"{dpi_note}"
     )
 
 

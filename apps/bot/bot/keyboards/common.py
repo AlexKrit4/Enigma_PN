@@ -16,17 +16,107 @@ def main_menu() -> ReplyKeyboardMarkup:
     )
 
 
-def plans_keyboard(plans: list[dict]) -> InlineKeyboardMarkup:
+def tariff_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📦 Ограниченный", callback_data="tarif:limited")],
+            [InlineKeyboardButton(text="♾️ Вечный", callback_data="tarif:eternal")],
+            [InlineKeyboardButton(text="🛠 Свой тариф", callback_data="tarif:custom")],
+        ]
+    )
+
+
+def plans_keyboard(plans: list[dict], *, back: bool = True) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    current_group = None
     for plan in plans:
-        group = plan.get("group_name") or ""
-        if group != current_group:
-            current_group = group
-            rows.append([InlineKeyboardButton(text=f"— {group.upper()} —", callback_data="noop")])
+        traffic = plan.get("traffic_gb")
+        traffic_label = "∞ ГБ" if traffic is None else f"{traffic} ГБ"
         label = f"{plan['name']} — {plan['price_rub']} ₽"
+        # Prefer short labels for limited/eternal shop buttons.
+        if plan.get("group_name") == "ограниченный":
+            label = f"{traffic_label} — {plan['price_rub']} ₽"
+        elif plan.get("group_name") == "вечный":
+            days = int(plan.get("duration_days") or 0)
+            if days >= 30 and days % 30 == 0:
+                months = days // 30
+                period = f"{months} мес." if months != 1 else "1 месяц"
+            else:
+                period = f"{days} дн."
+            label = f"{period} — {plan['price_rub']} ₽"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"buy:{plan['id']}")])
+    if back:
+        rows.append([InlineKeyboardButton(text="« Назад", callback_data="tarif:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def custom_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="tarif:home")]]
+    )
+
+
+def custom_gb_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="10 ГБ", callback_data="custom:gb:10"),
+                InlineKeyboardButton(text="30 ГБ", callback_data="custom:gb:30"),
+                InlineKeyboardButton(text="50 ГБ", callback_data="custom:gb:50"),
+            ],
+            [
+                InlineKeyboardButton(text="100 ГБ", callback_data="custom:gb:100"),
+                InlineKeyboardButton(text="250 ГБ", callback_data="custom:gb:250"),
+            ],
+            [InlineKeyboardButton(text="Другое число…", callback_data="custom:gb:ask")],
+            [InlineKeyboardButton(text="« Назад", callback_data="tarif:home")],
+        ]
+    )
+
+
+def custom_days_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="7 дн.", callback_data="custom:days:7"),
+                InlineKeyboardButton(text="14 дн.", callback_data="custom:days:14"),
+                InlineKeyboardButton(text="30 дн.", callback_data="custom:days:30"),
+            ],
+            [
+                InlineKeyboardButton(text="90 дн.", callback_data="custom:days:90"),
+                InlineKeyboardButton(text="180 дн.", callback_data="custom:days:180"),
+            ],
+            [InlineKeyboardButton(text="Другое число…", callback_data="custom:days:ask")],
+            [InlineKeyboardButton(text="« Назад", callback_data="tarif:custom")],
+        ]
+    )
+
+
+def custom_devices_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1", callback_data="custom:dev:1"),
+                InlineKeyboardButton(text="2", callback_data="custom:dev:2"),
+                InlineKeyboardButton(text="3", callback_data="custom:dev:3"),
+            ],
+            [
+                InlineKeyboardButton(text="4", callback_data="custom:dev:4"),
+                InlineKeyboardButton(text="5", callback_data="custom:dev:5"),
+            ],
+            [InlineKeyboardButton(text="Другое число…", callback_data="custom:dev:ask")],
+            [InlineKeyboardButton(text="« Назад", callback_data="tarif:custom")],
+        ]
+    )
+
+
+def custom_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить", callback_data="custom:pay")],
+            [InlineKeyboardButton(text="« Назад", callback_data="tarif:custom")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="tarif:home")],
+        ]
+    )
 
 
 def subscription_keyboard(

@@ -233,9 +233,13 @@ async def provision_subscription(
 
 async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings | None = None) -> Subscription:
     settings = settings or get_settings()
-    plan = await db.get(Plan, order.plan_id)
-    if not plan:
-        raise ValueError("Plan not found")
+    from app.services.pricing import order_terms
+
+    plan = await db.get(Plan, order.plan_id) if order.plan_id else None
+    terms = order_terms(order.meta, plan)
+    duration_days = int(terms["duration_days"])
+    traffic_gb = terms.get("traffic_gb")
+    device_limit = int(terms["device_limit"])
 
     active = await get_active_subscription(db, order.user_id)
     if not active:
@@ -254,15 +258,15 @@ async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings
             base = active.ends_at if active.ends_at > _now() else _now()
         else:
             base = active.ends_at if active.ends_at > _now() else _now()
-        active.ends_at = base + timedelta(days=plan.duration_days)
+        active.ends_at = base + timedelta(days=duration_days)
         active.status = SubscriptionStatus.active
-        active.plan_id = plan.id
+        active.plan_id = plan.id if plan else active.plan_id
         active.order_id = order.id
-        active.traffic_limit_gb = plan.traffic_gb
-        active.device_limit = plan.device_limit
+        active.traffic_limit_gb = traffic_gb
+        active.device_limit = device_limit
         active.reminder_sent = False
         marzban = MarzbanClient(settings)
-        data_limit = int(plan.traffic_gb * 1024**3) if plan.traffic_gb else 0
+        data_limit = int(traffic_gb * 1024**3) if traffic_gb else 0
         await marzban.modify_user(
             active.marzban_username,
             expire_ts=to_unix(active.ends_at),
@@ -274,13 +278,13 @@ async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings
 
     sub = Subscription(
         user_id=order.user_id,
-        plan_id=plan.id,
+        plan_id=plan.id if plan else None,
         order_id=order.id,
         status=SubscriptionStatus.active,
         starts_at=_now(),
-        ends_at=_now() + timedelta(days=plan.duration_days),
-        traffic_limit_gb=plan.traffic_gb,
-        device_limit=plan.device_limit,
+        ends_at=_now() + timedelta(days=duration_days),
+        traffic_limit_gb=traffic_gb,
+        device_limit=device_limit,
     )
     db.add(sub)
     await db.flush()
@@ -563,14 +567,49 @@ async def expire_due_subscriptions(db: AsyncSession, settings: Settings | None =
     return count
 
 
-async def create_order(db: AsyncSession, user: User, plan: Plan) -> Order:
+async def create_order(
+    db: AsyncSession,
+    user: User,
+    plan: Plan | None = None,
+    *,
+    amount: Decimal | None = None,
+    duration_days: int | None = None,
+    traffic_gb: int | None = None,
+    device_limit: int | None = None,
+    title: str | None = None,
+    kind: str | None = None,
+    meta_extra: dict | None = None,
+) -> Order:
+    from app.services.pricing import plan_meta
+
+    if plan is None and (duration_days is None or device_limit is None or amount is None):
+        raise ValueError("plan or custom terms required")
+
+    if plan is not None:
+        meta = plan_meta(plan)
+        order_amount = Decimal(plan.price_rub) if amount is None else Decimal(amount)
+        plan_id = plan.id
+    else:
+        meta = {
+            "duration_days": int(duration_days or 0),
+            "traffic_gb": traffic_gb,
+            "device_limit": int(device_limit or 1),
+            "title": title or "Свой тариф",
+            "kind": kind or "свой",
+        }
+        order_amount = Decimal(amount)  # type: ignore[arg-type]
+        plan_id = None
+    if meta_extra:
+        meta.update(meta_extra)
+
     order = Order(
         user_id=user.id,
-        plan_id=plan.id,
-        amount=Decimal(plan.price_rub),
+        plan_id=plan_id,
+        amount=order_amount,
         currency="RUB",
         status=OrderStatus.pending,
         payment_provider="yoomoney",
+        meta=meta,
     )
     db.add(order)
     await db.commit()

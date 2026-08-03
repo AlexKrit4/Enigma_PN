@@ -54,6 +54,42 @@ class ApiClient:
             json={"telegram_id": telegram_id, "plan_id": str(plan_id)},
         )
 
+    async def quote_custom_order(
+        self,
+        *,
+        traffic_gb: int,
+        days: int,
+        device_limit: int,
+    ) -> dict:
+        return await self._request(
+            "POST",
+            "/api/v1/orders/custom/quote",
+            json={
+                "traffic_gb": traffic_gb,
+                "days": days,
+                "device_limit": device_limit,
+            },
+        )
+
+    async def create_custom_order(
+        self,
+        telegram_id: int,
+        *,
+        traffic_gb: int,
+        days: int,
+        device_limit: int,
+    ) -> dict:
+        return await self._request(
+            "POST",
+            "/api/v1/orders/custom",
+            json={
+                "telegram_id": telegram_id,
+                "traffic_gb": traffic_gb,
+                "days": days,
+                "device_limit": device_limit,
+            },
+        )
+
     async def me(self, access_token: str) -> dict:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(

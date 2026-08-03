@@ -75,6 +75,19 @@ class OrderCreateIn(BaseModel):
     telegram_id: int | None = None
 
 
+class CustomOrderCreateIn(BaseModel):
+    telegram_id: int
+    traffic_gb: int = Field(ge=1, le=10000)
+    days: int = Field(ge=1, le=3650)
+    device_limit: int = Field(ge=1, le=20)
+
+
+class CustomQuoteIn(BaseModel):
+    traffic_gb: int = Field(ge=1, le=10000)
+    days: int = Field(ge=1, le=3650)
+    device_limit: int = Field(ge=1, le=20)
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +100,8 @@ class OrderOut(BaseModel):
     payment_url: str | None = None
     created_at: datetime
     paid_at: datetime | None
+    title: str | None = None
+    meta: dict | None = None
 
 
 class TrialCreateIn(BaseModel):

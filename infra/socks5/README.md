@@ -9,7 +9,7 @@ Per-account `username` / `password` stored in `proxy_access`, synced to `/opt/so
 | Listen | `0.0.0.0:40080` |
 | Auth | strong (required) |
 | Passwd | `/opt/socks5/passwd` (`user:CL:pass`) |
-| Container | `socks5` (alpine + 3proxy, host network) |
+| Container | `socks5` (`3proxy/3proxy`, host network) |
 
 Telegram deep link: `https://t.me/socks?server=…&port=40080&user=…&pass=…`
 

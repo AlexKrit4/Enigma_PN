@@ -290,8 +290,12 @@ async def grant_subscription(
     traffic_gb: int | None = None,
     device_limit: int | None = None,
     settings: Settings | None = None,
+    notify: bool = False,
 ) -> Subscription:
-    """Admin: issue/extend a free subscription for N days."""
+    """Admin: issue/extend a free subscription for N days.
+
+    notify=False by default — admin actions must stay silent for end users.
+    """
     settings = settings or get_settings()
     if days < 1:
         raise ValueError("days must be >= 1")
@@ -316,9 +320,10 @@ async def grant_subscription(
         )
         await db.commit()
         await db.refresh(active)
-        await notify_subscription_ready(
-            db, user=user, sub=active, title="Админ выдал/продлил подписку", settings=settings
-        )
+        if notify:
+            await notify_subscription_ready(
+                db, user=user, sub=active, title="Админ выдал/продлил подписку", settings=settings
+            )
         return active
 
     sub = Subscription(
@@ -334,9 +339,73 @@ async def grant_subscription(
     await provision_subscription(db, sub, settings=settings)
     await db.commit()
     await db.refresh(sub)
-    await notify_subscription_ready(
-        db, user=user, sub=sub, title="Админ выдал подписку", settings=settings
-    )
+    if notify:
+        await notify_subscription_ready(
+            db, user=user, sub=sub, title="Админ выдал подписку", settings=settings
+        )
+    return sub
+
+
+async def revoke_subscription(
+    db: AsyncSession,
+    *,
+    user: User,
+    settings: Settings | None = None,
+) -> Subscription | None:
+    """Disable active subscription and cut off Marzban access. Silent."""
+    settings = settings or get_settings()
+    sub = await get_active_subscription(db, user.id)
+    if not sub:
+        # Also try latest non-expired disabled/active for idempotency
+        result = await db.execute(
+            select(Subscription)
+            .where(Subscription.user_id == user.id)
+            .order_by(Subscription.ends_at.desc())
+            .limit(1)
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            return None
+    sub.status = SubscriptionStatus.disabled
+    if sub.marzban_username:
+        try:
+            await MarzbanClient(settings).modify_user(sub.marzban_username, status="disabled")
+        except Exception as exc:
+            log.error("revoke_marzban_failed", error=str(exc), username=sub.marzban_username)
+    await db.commit()
+    await db.refresh(sub)
+    return sub
+
+
+async def update_subscription_limits(
+    db: AsyncSession,
+    *,
+    user: User,
+    traffic_gb: int | None = None,
+    clear_traffic_limit: bool = False,
+    device_limit: int | None = None,
+    settings: Settings | None = None,
+) -> Subscription:
+    """Update traffic/device limits without changing expiry. Silent."""
+    settings = settings or get_settings()
+    sub = await get_active_subscription(db, user.id)
+    if not sub:
+        raise ValueError("No active subscription")
+    if clear_traffic_limit:
+        sub.traffic_limit_gb = None
+    elif traffic_gb is not None:
+        sub.traffic_limit_gb = traffic_gb
+    if device_limit is not None:
+        sub.device_limit = device_limit
+    if sub.marzban_username:
+        data_limit = int(sub.traffic_limit_gb * 1024**3) if sub.traffic_limit_gb else 0
+        await MarzbanClient(settings).modify_user(
+            sub.marzban_username,
+            data_limit_bytes=data_limit,
+            status="active",
+        )
+    await db.commit()
+    await db.refresh(sub)
     return sub
 
 

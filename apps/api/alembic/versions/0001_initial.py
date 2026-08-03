@@ -62,8 +62,13 @@ def upgrade() -> None:
         sa.Column("current_users", sa.Integer(), server_default="0", nullable=False),
     )
 
-    order_status = sa.Enum("pending", "paid", "failed", "refunded", name="orderstatus")
-    sub_status = sa.Enum("trial", "active", "expired", "disabled", name="subscriptionstatus")
+    # create_type=False — enums are created once below; avoids DuplicateObjectError
+    order_status = postgresql.ENUM(
+        "pending", "paid", "failed", "refunded", name="orderstatus", create_type=False
+    )
+    sub_status = postgresql.ENUM(
+        "trial", "active", "expired", "disabled", name="subscriptionstatus", create_type=False
+    )
     order_status.create(op.get_bind(), checkfirst=True)
     sub_status.create(op.get_bind(), checkfirst=True)
 

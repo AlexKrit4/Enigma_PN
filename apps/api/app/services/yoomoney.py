@@ -110,10 +110,12 @@ class YooMoneyProvider:
         Verify YooMoney HTTP notification.
 
         Prefer modern `sign` (HMAC-SHA256). Fall back to legacy `sha1_hash`.
+        Use withdraw_amount (what payer paid) when present — `amount` is net after fee.
         """
         label = form.get("label", "")
         operation_id = form.get("operation_id", "")
-        amount_raw = form.get("amount", "0") or "0"
+        # Prefer what the customer paid; fall back to credited amount.
+        amount_raw = form.get("withdraw_amount") or form.get("amount") or "0"
 
         secret = self.settings.yoomoney_notification_secret
         if not secret:
@@ -126,7 +128,7 @@ class YooMoneyProvider:
                 error="YOOMONEY_NOTIFICATION_SECRET not configured",
             )
 
-        if not operation_id or "amount" not in form:
+        if not operation_id or ("amount" not in form and "withdraw_amount" not in form):
             return PaymentResult(
                 success=False,
                 external_id=operation_id,

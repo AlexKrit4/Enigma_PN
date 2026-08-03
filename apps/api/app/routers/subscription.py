@@ -86,8 +86,8 @@ async def yoomoney_webhook(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found for label")
 
-    # Amount check (allow small float diffs)
-    if result.amount < order.amount:
+    # Amount check: accept withdraw_amount / credited amount with small fee slack
+    if result.amount + Decimal("5.00") < order.amount:
         raise HTTPException(status_code=400, detail="Amount too low")
 
     order, sub, created = await mark_order_paid(

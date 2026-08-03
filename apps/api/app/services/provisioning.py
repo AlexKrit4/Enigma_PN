@@ -153,12 +153,40 @@ async def provision_subscription(
     if subscription.traffic_limit_gb is not None:
         data_limit = int(subscription.traffic_limit_gb * 1024**3)
 
-    client = await marzban.create_user(
-        username=username,
-        expire_ts=to_unix(subscription.ends_at),
-        data_limit_bytes=data_limit,
-        note=f"enigma:{subscription.id}",
-    )
+    try:
+        client = await marzban.create_user(
+            username=username,
+            expire_ts=to_unix(subscription.ends_at),
+            data_limit_bytes=data_limit,
+            note=f"enigma:{subscription.id}",
+        )
+    except Exception as exc:
+        # Username already exists in Marzban — reactivate/update instead.
+        if "409" not in str(exc) and "Conflict" not in str(exc):
+            raise
+        log.warning("marzban_create_conflict_reuse", username=username, error=str(exc))
+        await marzban.modify_user(
+            username,
+            expire_ts=to_unix(subscription.ends_at),
+            status="active",
+            data_limit_bytes=data_limit or 0,
+        )
+        existing = await marzban.get_user(username) or {}
+        import uuid as uuid_mod
+
+        user_uuid = uuid_mod.UUID(
+            existing.get("proxies", {}).get("vless", {}).get("id") or str(uuid_mod.uuid4())
+        )
+        from app.services.marzban import ProvisionedClient
+
+        client = ProvisionedClient(
+            username=username,
+            uuid=user_uuid,
+            node_id=settings.vpn_nodes[0]["id"] if settings.vpn_nodes else "nl-1",
+            links=list(existing.get("links") or []),
+            raw=existing,
+        )
+
     subscription.marzban_username = client.username
     subscription.marzban_uuid = client.uuid
     subscription.node_id = client.node_id
@@ -176,9 +204,22 @@ async def activate_paid_order(db: AsyncSession, order: Order, settings: Settings
         raise ValueError("Plan not found")
 
     active = await get_active_subscription(db, order.user_id)
+    if not active:
+        # Reuse disabled/expired row to avoid Marzban username 409.
+        result = await db.execute(
+            select(Subscription)
+            .options(selectinload(Subscription.plan))
+            .where(Subscription.user_id == order.user_id)
+            .order_by(Subscription.ends_at.desc())
+            .limit(1)
+        )
+        active = result.scalar_one_or_none()
+
     if active and active.marzban_username:
-        # Extend existing
-        base = active.ends_at if active.ends_at > _now() else _now()
+        if active.status in {SubscriptionStatus.disabled, SubscriptionStatus.expired}:
+            base = active.ends_at if active.ends_at > _now() else _now()
+        else:
+            base = active.ends_at if active.ends_at > _now() else _now()
         active.ends_at = base + timedelta(days=plan.duration_days)
         active.status = SubscriptionStatus.active
         active.plan_id = plan.id

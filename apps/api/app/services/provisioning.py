@@ -304,14 +304,30 @@ async def grant_subscription(
     """Admin: issue/extend a free subscription for N days.
 
     notify=False by default — admin actions must stay silent for end users.
+    Reactivates disabled/expired rows that already have a Marzban user.
     """
     settings = settings or get_settings()
     if days < 1:
         raise ValueError("days must be >= 1")
 
     active = await get_active_subscription(db, user.id)
+    if not active:
+        # Reuse latest subscription (disabled/expired) to avoid Marzban 409 on recreate.
+        result = await db.execute(
+            select(Subscription)
+            .options(selectinload(Subscription.plan))
+            .where(Subscription.user_id == user.id)
+            .order_by(Subscription.ends_at.desc())
+            .limit(1)
+        )
+        active = result.scalar_one_or_none()
+
     if active and active.marzban_username:
-        base = active.ends_at if active.ends_at > _now() else _now()
+        if active.status in {SubscriptionStatus.disabled, SubscriptionStatus.expired}:
+            # Keep remaining paid time if still in the future; otherwise start now.
+            base = active.ends_at if active.ends_at > _now() else _now()
+        else:
+            base = active.ends_at if active.ends_at > _now() else _now()
         active.ends_at = base + timedelta(days=days)
         active.status = SubscriptionStatus.active
         if traffic_gb is not None:

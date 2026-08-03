@@ -117,6 +117,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     assert user
     data = await api.auth(user.id, user.username)
     sub = data.get("user", {}).get("subscription")
+    proxy = data.get("user", {}).get("proxy")
     intro = (
         f"Привет! Это <b>{settings.brand_name}</b> — VPN для Happ.\n\n"
         f"Сайт: https://{settings.domain}\n"
@@ -131,12 +132,15 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
         except Exception:
             trial_note = "Пробный период уже использован или недоступен.\n\n"
 
-    text = intro + "\n" + trial_note + format_subscription_card(sub, brand=settings.brand_name)
+    text = intro + "\n" + trial_note + format_subscription_card(
+        sub, brand=settings.brand_name, proxy=proxy
+    )
     await message.answer(text, reply_markup=main_menu(), parse_mode="HTML")
-    if sub and (sub.get("happ_open_url") or sub.get("sub_url")):
+    kb = _sub_keyboard(sub, proxy)
+    if kb:
         await message.answer(
             "Готово к подключению:",
-            reply_markup=_sub_keyboard(sub),
+            reply_markup=kb,
             parse_mode="HTML",
         )
 
@@ -449,10 +453,11 @@ async def cmd_mysub(message: Message, state: FSMContext) -> None:
     token = data["access_token"]
     me = await api.me(token)
     sub = me.get("subscription")
+    proxy = me.get("proxy")
     await message.answer(
-        format_subscription_card(sub, brand=settings.brand_name),
+        format_subscription_card(sub, brand=settings.brand_name, proxy=proxy),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub) if sub else None,
+        reply_markup=_sub_keyboard(sub, proxy),
     )
 
 
@@ -521,10 +526,11 @@ async def devices_back(callback: CallbackQuery) -> None:
     data = await api.auth(user.id, user.username)
     me = await api.me(data["access_token"])
     sub = me.get("subscription")
+    proxy = me.get("proxy")
     await callback.message.edit_text(  # type: ignore[union-attr]
-        format_subscription_card(sub, brand=settings.brand_name),
+        format_subscription_card(sub, brand=settings.brand_name, proxy=proxy),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub),
+        reply_markup=_sub_keyboard(sub, proxy),
     )
     await callback.answer()
 

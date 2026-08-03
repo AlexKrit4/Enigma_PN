@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # Shared MTProto proxy (Telegram) — access gated by ProxyAccess per account
     mtproto_enabled: bool = False
     mtproto_host: str = "bigwinzone.ru"
-    mtproto_port: int = 8443
+    mtproto_port: int = 443
     mtproto_secret: str = ""
 
     @field_validator("admin_telegram_ids", mode="before")

@@ -655,6 +655,52 @@ async def disable_promo(
     return {"ok": True, "code": promo.code, "is_active": False}
 
 
+@router.post("/promos/{code}/redeem")
+async def redeem_promo_admin(
+    code: str,
+    telegram_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    _: None = Depends(require_bot),
+) -> dict:
+    """Admin-driven silent promo redeem for a specific user."""
+    from app.models.entities import PromoRedemption
+
+    promo = await db.scalar(select(PromoCode).where(func.upper(PromoCode.code) == code.strip().upper()))
+    if not promo or not promo.is_active:
+        raise HTTPException(status_code=404, detail="Promo inactive or missing")
+    if promo.expires_at and promo.expires_at <= _now():
+        raise HTTPException(status_code=400, detail="Promo expired")
+    if promo.max_uses is not None and promo.used_count >= promo.max_uses:
+        raise HTTPException(status_code=400, detail="Promo exhausted")
+    user = await get_or_create_telegram_user(db, telegram_id, settings=settings)
+    await db.commit()
+    existing = await db.scalar(
+        select(PromoRedemption).where(PromoRedemption.promo_id == promo.id, PromoRedemption.user_id == user.id)
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Already redeemed by this user")
+    sub = await grant_subscription(
+        db,
+        user=user,
+        days=promo.days,
+        traffic_gb=promo.traffic_gb,
+        device_limit=promo.device_limit,
+        settings=settings,
+        notify=False,
+    )
+    db.add(PromoRedemption(promo_id=promo.id, user_id=user.id))
+    promo.used_count += 1
+    await db.commit()
+    return {
+        "ok": True,
+        "code": promo.code,
+        "telegram_id": telegram_id,
+        "ends_at": sub.ends_at.isoformat(),
+        "notified": False,
+    }
+
+
 @router.get("/export.csv")
 async def export_csv(
     db: AsyncSession = Depends(get_db),

@@ -67,17 +67,32 @@ def serialize_subscription(sub: Subscription | None, settings: Settings | None =
         return None
     settings = settings or get_settings()
     sub_url = build_sub_url(sub.sub_token, settings)
+    plan = sub.plan
+    plan_data = None
+    if plan is not None:
+        plan_data = {
+            "id": str(plan.id),
+            "slug": plan.slug,
+            "name": plan.name,
+            "group_name": plan.group_name,
+            "duration_days": plan.duration_days,
+            "traffic_gb": plan.traffic_gb,
+            "device_limit": plan.device_limit,
+            "price_rub": str(plan.price_rub),
+            "is_active": plan.is_active,
+            "sort_order": plan.sort_order,
+        }
     return {
-        "id": sub.id,
+        "id": str(sub.id),
         "status": sub.status.value,
-        "starts_at": sub.starts_at,
-        "ends_at": sub.ends_at,
+        "starts_at": sub.starts_at.isoformat() if sub.starts_at else None,
+        "ends_at": sub.ends_at.isoformat() if sub.ends_at else None,
         "traffic_limit_gb": sub.traffic_limit_gb,
-        "traffic_used_gb": sub.traffic_used_gb,
+        "traffic_used_gb": str(sub.traffic_used_gb),
         "device_limit": sub.device_limit,
         "sub_url": sub_url,
         "happ_deep_link": build_happ_deep_link(sub_url),
-        "plan": sub.plan,
+        "plan": plan_data,
     }
 
 

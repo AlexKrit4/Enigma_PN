@@ -78,7 +78,9 @@ export default async function HomePage() {
 
       <section id="pricing" className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
         <h2 className="font-display text-3xl text-mist md:text-4xl">Тарифы</h2>
-        <p className="mt-3 max-w-2xl text-mist/70">Две линейки: для себя и семейный. Оплата через ЮMoney, активация по HTTP-уведомлению.</p>
+        <p className="mt-3 max-w-2xl text-mist/70">
+          Ограниченный трафик, вечный трафик или свой тариф. Оплата в Telegram-боте через ЮMoney.
+        </p>
 
         {groups.length === 0 ? (
           <p className="mt-10 text-mist/60">Тарифы появятся после запуска API.</p>
@@ -94,11 +96,11 @@ export default async function HomePage() {
                       key={plan.id}
                       className="rounded-2xl border border-mist/10 bg-white/[0.03] p-6 backdrop-blur transition hover:border-accent/40 hover:bg-white/[0.05]"
                     >
-                      <div className="font-display text-2xl text-mist">{plan.name.replace(`${group === "для себя" ? "Для себя — " : "Семейный — "}`, "")}</div>
+                      <div className="font-display text-2xl text-mist">{plan.name}</div>
                       <div className="mt-4 font-display text-4xl text-accent">{plan.price_rub} ₽</div>
                       <ul className="mt-6 space-y-2 text-sm text-mist/75">
                         <li>{plan.duration_days} дней</li>
-                        <li>{plan.traffic_gb ?? "∞"} GB трафика</li>
+                        <li>{plan.traffic_gb == null ? "вечный трафик" : `${plan.traffic_gb} ГБ трафика`}</li>
                         <li>до {plan.device_limit} устройств</li>
                         <li>клиент Happ</li>
                       </ul>
@@ -114,6 +116,19 @@ export default async function HomePage() {
             </div>
           ))
         )}
+
+        <div className="mt-12 rounded-2xl border border-mist/10 bg-white/[0.03] p-6">
+          <div className="font-display text-2xl text-mist">Свой тариф</div>
+          <p className="mt-3 text-mist/70">
+            Соберите сами в боте: 2 ₽ за ГБ, 1 ₽ за день, 25 ₽ за устройство. Вечный трафик в своём тарифе недоступен.
+          </p>
+          <a
+            href={`https://t.me/${BOT}`}
+            className="mt-6 inline-flex rounded-full bg-mist px-4 py-2 text-sm font-semibold text-ink hover:bg-white"
+          >
+            Собрать в боте
+          </a>
+        </div>
       </section>
 
       <section className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">

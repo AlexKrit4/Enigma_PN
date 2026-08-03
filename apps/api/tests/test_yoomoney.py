@@ -56,3 +56,26 @@ def test_yoomoney_hash_bad() -> None:
     }
     result = YooMoneyProvider(settings).verify_notification(form)
     assert result.success is False
+
+
+def test_yoomoney_sign_ok() -> None:
+    import hmac
+    from urllib.parse import quote
+
+    settings = Settings(yoomoney_notification_secret="secret123")
+    form = {
+        "notification_type": "p2p-incoming",
+        "operation_id": "999",
+        "amount": "100.00",
+        "currency": "643",
+        "datetime": "2026-08-03T12:00:00Z",
+        "sender": "410022222222222",
+        "codepro": "false",
+        "label": "abcLABEL",
+    }
+    parts = [f"{k}={quote(form[k], safe='')}" for k in sorted(form)]
+    payload = "&".join(parts)
+    form["sign"] = hmac.new(b"secret123", payload.encode(), hashlib.sha256).hexdigest()
+    result = YooMoneyProvider(settings).verify_notification(form)
+    assert result.success is True
+    assert result.label == "abcLABEL"

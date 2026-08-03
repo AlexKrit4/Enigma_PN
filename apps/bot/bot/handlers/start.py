@@ -181,7 +181,35 @@ async def cmd_admin(message: Message, command: CommandObject) -> None:
         await message.answer(f"Продлено до {result['ends_at']}")
         return
 
-    await message.answer("Команды: /admin stats | /admin user ID | /admin extend ID DAYS")
+    if args[0] == "grant" and len(args) >= 3:
+        # /admin grant TELEGRAM_ID DAYS [GB]
+        tg_id = int(args[1])
+        days = int(args[2])
+        traffic_gb = int(args[3]) if len(args) >= 4 else None
+        result = await api.admin_grant(tg_id, days, traffic_gb=traffic_gb)
+        sub = result.get("subscription") or {}
+        await message.answer(
+            f"✅ Выдано на {days} дн.\n"
+            f"До: {result.get('ends_at')}\n"
+            f"URL: <code>{sub.get('sub_url')}</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    if args[0] == "confirm" and len(args) >= 2:
+        # /admin confirm PAYMENT_LABEL
+        result = await api.admin_confirm_order(args[1])
+        await message.answer(f"Заказ подтверждён: {result}")
+        return
+
+    await message.answer(
+        "Команды админа:\n"
+        "/admin stats\n"
+        "/admin user ID\n"
+        "/admin extend ID DAYS\n"
+        "/admin grant ID DAYS [GB] — выдать бесплатную подписку\n"
+        "/admin confirm LABEL — вручную подтвердить оплату"
+    )
 
 
 @router.message(F.text & ~F.text.startswith("/"))

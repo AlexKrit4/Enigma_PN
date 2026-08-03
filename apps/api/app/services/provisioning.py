@@ -22,6 +22,7 @@ from app.models.entities import (
 )
 from app.services.happ import build_happ_deep_link, build_sub_url
 from app.services.marzban import MarzbanClient, to_unix
+from app.services.telegram_notify import send_telegram_message
 
 log = structlog.get_logger(__name__)
 
@@ -229,6 +230,97 @@ async def mark_order_paid(
     if sub:
         await db.refresh(sub)
     return order, sub, True
+
+
+async def notify_subscription_ready(
+    db: AsyncSession,
+    *,
+    user: User,
+    sub: Subscription,
+    title: str,
+    settings: Settings | None = None,
+) -> None:
+    settings = settings or get_settings()
+    if not user.telegram_id:
+        return
+    data = serialize_subscription(sub, settings) or {}
+    sub_url = data.get("sub_url") or ""
+    happ = data.get("happ_deep_link") or ""
+    text = (
+        f"✅ <b>{title}</b>\n\n"
+        f"Статус: <b>{sub.status.value}</b>\n"
+        f"До: <b>{sub.ends_at.isoformat()}</b>\n"
+        f"Трафик: {sub.traffic_used_gb} / {sub.traffic_limit_gb if sub.traffic_limit_gb is not None else '∞'} GB\n"
+        f"Устройств: {sub.device_limit}\n\n"
+        f"Ссылка подписки:\n<code>{sub_url}</code>"
+    )
+    markup = None
+    if happ:
+        markup = {
+            "inline_keyboard": [
+                [{"text": "🚀 Добавить в Happ", "url": happ}],
+                [{"text": "📋 Скопировать URL", "callback_data": "show_sub_url"}],
+            ]
+        }
+    await send_telegram_message(int(user.telegram_id), text, settings=settings, reply_markup=markup)
+
+
+async def grant_subscription(
+    db: AsyncSession,
+    *,
+    user: User,
+    days: int,
+    traffic_gb: int | None = None,
+    device_limit: int | None = None,
+    settings: Settings | None = None,
+) -> Subscription:
+    """Admin: issue/extend a free subscription for N days."""
+    settings = settings or get_settings()
+    if days < 1:
+        raise ValueError("days must be >= 1")
+
+    active = await get_active_subscription(db, user.id)
+    if active and active.marzban_username:
+        base = active.ends_at if active.ends_at > _now() else _now()
+        active.ends_at = base + timedelta(days=days)
+        active.status = SubscriptionStatus.active
+        if traffic_gb is not None:
+            active.traffic_limit_gb = traffic_gb
+        if device_limit is not None:
+            active.device_limit = device_limit
+        active.reminder_sent = False
+        marzban = MarzbanClient(settings)
+        data_limit = int(active.traffic_limit_gb * 1024**3) if active.traffic_limit_gb else 0
+        await marzban.modify_user(
+            active.marzban_username,
+            expire_ts=to_unix(active.ends_at),
+            status="active",
+            data_limit_bytes=data_limit,
+        )
+        await db.commit()
+        await db.refresh(active)
+        await notify_subscription_ready(
+            db, user=user, sub=active, title="Админ выдал/продлил подписку", settings=settings
+        )
+        return active
+
+    sub = Subscription(
+        user_id=user.id,
+        status=SubscriptionStatus.active,
+        starts_at=_now(),
+        ends_at=_now() + timedelta(days=days),
+        traffic_limit_gb=traffic_gb,
+        device_limit=device_limit or settings.default_device_limit,
+    )
+    db.add(sub)
+    await db.flush()
+    await provision_subscription(db, sub, settings=settings)
+    await db.commit()
+    await db.refresh(sub)
+    await notify_subscription_ready(
+        db, user=user, sub=sub, title="Админ выдал подписку", settings=settings
+    )
+    return sub
 
 
 async def expire_due_subscriptions(db: AsyncSession, settings: Settings | None = None) -> int:

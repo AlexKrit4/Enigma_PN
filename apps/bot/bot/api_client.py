@@ -68,3 +68,23 @@ class ApiClient:
 
     async def admin_extend(self, telegram_id: int, days: int) -> dict:
         return await self._request("POST", f"/admin/users/{telegram_id}/extend", json={"days": days})
+
+    async def admin_grant(
+        self,
+        telegram_id: int,
+        days: int,
+        traffic_gb: int | None = None,
+        device_limit: int | None = None,
+        username: str | None = None,
+    ) -> dict:
+        payload: dict[str, Any] = {"days": days}
+        if traffic_gb is not None:
+            payload["traffic_gb"] = traffic_gb
+        if device_limit is not None:
+            payload["device_limit"] = device_limit
+        if username:
+            payload["username"] = username
+        return await self._request("POST", f"/admin/users/{telegram_id}/grant", json=payload)
+
+    async def admin_confirm_order(self, payment_label: str) -> dict:
+        return await self._request("POST", f"/admin/orders/{payment_label}/confirm")

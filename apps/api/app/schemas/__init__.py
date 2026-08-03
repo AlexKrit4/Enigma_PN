@@ -84,6 +84,13 @@ class AdminExtendIn(BaseModel):
     days: int = Field(gt=0, le=3650)
 
 
+class AdminGrantIn(BaseModel):
+    days: int = Field(gt=0, le=3650)
+    traffic_gb: int | None = Field(default=None, ge=0)
+    device_limit: int | None = Field(default=None, ge=1, le=50)
+    username: str | None = None
+
+
 class StatsOut(BaseModel):
     users_total: int
     subscriptions_active: int

@@ -11,11 +11,17 @@ from sqlalchemy.orm import selectinload
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.deps import require_bot
+from app.deps import get_or_create_telegram_user, require_bot
 from app.models.entities import Order, OrderStatus, Plan, Subscription, SubscriptionStatus, User
-from app.schemas import AdminExtendIn, PlanOut, StatsOut, UserOut
+from app.schemas import AdminExtendIn, AdminGrantIn, PlanOut, StatsOut, UserOut
 from app.services.marzban import MarzbanClient, to_unix
-from app.services.provisioning import get_active_subscription, serialize_subscription
+from app.services.provisioning import (
+    get_active_subscription,
+    grant_subscription,
+    mark_order_paid,
+    notify_subscription_ready,
+    serialize_subscription,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -103,7 +109,76 @@ async def extend_user(
     if sub.marzban_username:
         await MarzbanClient(settings).modify_user(sub.marzban_username, expire_ts=to_unix(sub.ends_at), status="active")
     await db.commit()
+    await db.refresh(sub)
+    await notify_subscription_ready(
+        db, user=user, sub=sub, title="Подписка продлена админом", settings=settings
+    )
     return {"ok": True, "ends_at": sub.ends_at.isoformat()}
+
+
+@router.post("/users/{telegram_id}/grant")
+async def grant_user(
+    telegram_id: int,
+    body: AdminGrantIn,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    _: None = Depends(require_bot),
+) -> dict:
+    """Issue or extend a free subscription for any duration."""
+    user = await get_or_create_telegram_user(
+        db, telegram_id, username=body.username, settings=settings
+    )
+    await db.commit()
+    sub = await grant_subscription(
+        db,
+        user=user,
+        days=body.days,
+        traffic_gb=body.traffic_gb,
+        device_limit=body.device_limit,
+        settings=settings,
+    )
+    return {
+        "ok": True,
+        "subscription": serialize_subscription(sub, settings),
+        "ends_at": sub.ends_at.isoformat(),
+    }
+
+
+@router.post("/orders/{payment_label}/confirm")
+async def confirm_order_by_label(
+    payment_label: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    _: None = Depends(require_bot),
+) -> dict:
+    """Manual payment confirmation (admin recovery when webhook failed)."""
+    result = await db.execute(select(Order).where(Order.payment_label == payment_label))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order, sub, created = await mark_order_paid(
+        db,
+        order=order,
+        external_id=order.payment_external_id or f"manual-{payment_label}",
+        raw={"manual": True, "label": payment_label},
+        settings=settings,
+    )
+    if created and sub:
+        user = await db.get(User, order.user_id)
+        if user:
+            await notify_subscription_ready(
+                db,
+                user=user,
+                sub=sub,
+                title="Оплата подтверждена — подписка активна",
+                settings=settings,
+            )
+    return {
+        "ok": True,
+        "created": created,
+        "order_status": order.status.value,
+        "subscription": serialize_subscription(sub, settings) if sub else None,
+    }
 
 
 @router.get("/plans", response_model=list[PlanOut])

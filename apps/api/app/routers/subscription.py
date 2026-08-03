@@ -7,11 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models.entities import Order, Subscription, SubscriptionStatus
+from app.models.entities import Order, Subscription, SubscriptionStatus, User
 from app.services.happ import build_subscription_response
 from app.services.marzban import MarzbanClient
-from app.services.provisioning import mark_order_paid
+from app.services.provisioning import mark_order_paid, notify_subscription_ready
 from app.services.yoomoney import YooMoneyProvider
+import structlog
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["subscription", "webhooks"])
 
@@ -64,8 +67,18 @@ async def yoomoney_webhook(
 ) -> dict:
     provider = YooMoneyProvider(settings)
     form = await provider.parse_request(request)
+    log.info(
+        "yoomoney_webhook_received",
+        keys=sorted(form.keys()),
+        label=form.get("label"),
+        operation_id=form.get("operation_id"),
+        amount=form.get("amount"),
+        has_sign=bool(form.get("sign")),
+        has_sha1=bool(form.get("sha1_hash")),
+    )
     result = provider.verify_notification(form)
     if not result.success:
+        log.warning("yoomoney_webhook_rejected", error=result.error, label=result.label)
         raise HTTPException(status_code=400, detail=result.error or "invalid notification")
 
     order_result = await db.execute(select(Order).where(Order.payment_label == result.label))
@@ -84,6 +97,16 @@ async def yoomoney_webhook(
         raw=result.raw,
         settings=settings,
     )
+    if created and sub:
+        user = await db.get(User, order.user_id)
+        if user:
+            await notify_subscription_ready(
+                db,
+                user=user,
+                sub=sub,
+                title="Оплата получена — подписка активна",
+                settings=settings,
+            )
     return {
         "ok": True,
         "created": created,

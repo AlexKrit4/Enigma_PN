@@ -79,7 +79,7 @@ export default async function HomePage() {
       <section id="pricing" className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
         <h2 className="font-display text-3xl text-mist md:text-4xl">Тарифы</h2>
         <p className="mt-3 max-w-2xl text-mist/70">
-          Ограниченный трафик, вечный трафик или свой тариф. Оплата в Telegram-боте через ЮMoney.
+          Ограниченный трафик, вечный трафик, прокси для Telegram или свой тариф. Оплата в Telegram-боте через ЮMoney.
         </p>
 
         {groups.length === 0 ? (

@@ -34,6 +34,7 @@ class SubscriptionOut(BaseModel):
     device_limit: int
     sub_url: str | None = None
     happ_deep_link: str | None = None
+    happ_open_url: str | None = None
     plan: PlanOut | None = None
 
 

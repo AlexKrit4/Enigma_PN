@@ -16,7 +16,69 @@ def build_sub_url(sub_token: str, settings: Settings | None = None) -> str:
 
 
 def build_happ_deep_link(sub_url: str) -> str:
-    return f"happ://import/{quote(sub_url, safe='')}"
+    """Native Happ deep link — opens app and imports subscription URL."""
+    return f"happ://add/{sub_url}"
+
+
+def build_happ_open_url(sub_token: str, settings: Settings | None = None) -> str:
+    """HTTPS page Telegram can open as a button; redirects into Happ."""
+    settings = settings or get_settings()
+    base = settings.subscription_base_url.rstrip("/").rsplit("/s", 1)[0]
+    return f"{base}/add/{sub_token}"
+
+
+def build_happ_redirect_html(sub_url: str, brand: str = "Enigma_PN") -> str:
+    deep = build_happ_deep_link(sub_url)
+    deep_alt = f"happ://import/{quote(sub_url, safe='')}"
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Открыть в Happ — {brand}</title>
+  <style>
+    body {{
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: Georgia, "Times New Roman", serif;
+      background: radial-gradient(1000px 520px at 15% 0%, #d9ebff, #f6f1e8 52%, #ebe2d4);
+      color: #1b2433; padding: 24px;
+    }}
+    .card {{
+      width: min(420px, 100%); background: rgba(255,255,255,.86);
+      border: 1px solid rgba(27,36,51,.08); border-radius: 24px;
+      padding: 28px 24px; box-shadow: 0 18px 50px rgba(27,36,51,.08);
+      text-align: center;
+    }}
+    h1 {{ margin: 0 0 10px; font-size: 1.5rem; font-weight: 700; }}
+    p {{ margin: 0 0 18px; line-height: 1.5; color: #4b5563; font-family: system-ui, sans-serif; }}
+    a.btn {{
+      display: inline-block; text-decoration: none; background: #1b2433; color: #fff;
+      padding: 14px 18px; border-radius: 14px; font-weight: 600;
+      font-family: system-ui, sans-serif;
+    }}
+    .muted {{ margin-top: 16px; font-size: .9rem; color: #6b7280; font-family: system-ui, sans-serif; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Открываем Happ…</h1>
+    <p>Если приложение не открылось само — нажмите кнопку. Подписка добавится автоматически.</p>
+    <a class="btn" id="open" href="{deep}">Открыть в Happ</a>
+    <p class="muted">Нет Happ? Установите приложение и вернитесь по этой ссылке.</p>
+  </div>
+  <script>
+    (function () {{
+      var primary = {deep!r};
+      var alt = {deep_alt!r};
+      try {{ window.location.href = primary; }} catch (e) {{}}
+      setTimeout(function () {{
+        try {{ window.location.href = alt; }} catch (e) {{}}
+      }}, 700);
+    }})();
+  </script>
+</body>
+</html>
+"""
 
 
 def subscription_userinfo(

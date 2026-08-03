@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -8,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models.entities import Order, Subscription, SubscriptionStatus, User
-from app.services.happ import build_subscription_response
+from app.services.happ import (
+    build_happ_redirect_html,
+    build_sub_url,
+    build_subscription_response,
+)
 from app.services.marzban import MarzbanClient
 from app.services.provisioning import mark_order_paid, notify_subscription_ready
 from app.services.yoomoney import YooMoneyProvider
@@ -57,6 +63,24 @@ async def subscription_proxy(
 
     _, headers = build_subscription_response(sub, links if not cached else [], settings)
     return Response(content=body, media_type="text/plain; charset=utf-8", headers=headers)
+
+
+@router.get("/add/{sub_token}")
+async def happ_add_redirect(
+    sub_token: str,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """HTTPS bridge for Telegram buttons → opens Happ and imports subscription."""
+    result = await db.execute(select(Subscription).where(Subscription.sub_token == sub_token))
+    sub = result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if sub.status not in (SubscriptionStatus.trial, SubscriptionStatus.active):
+        raise HTTPException(status_code=403, detail="Subscription inactive")
+    sub_url = build_sub_url(sub_token, settings)
+    html = build_happ_redirect_html(sub_url, brand=settings.brand_name)
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 @router.post("/webhooks/yoomoney")

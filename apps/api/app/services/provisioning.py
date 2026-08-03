@@ -20,7 +20,7 @@ from app.models.entities import (
     User,
     VpnNode,
 )
-from app.services.happ import build_happ_deep_link, build_sub_url
+from app.services.happ import build_happ_deep_link, build_happ_open_url, build_sub_url
 from app.services.marzban import MarzbanClient, to_unix
 from app.services.telegram_notify import send_telegram_message
 
@@ -101,6 +101,7 @@ def serialize_subscription(sub: Subscription | None, settings: Settings | None =
         "device_limit": sub.device_limit,
         "sub_url": sub_url,
         "happ_deep_link": build_happ_deep_link(sub_url),
+        "happ_open_url": build_happ_open_url(sub.sub_token, settings),
         "plan": plan_data,
     }
 
@@ -309,24 +310,28 @@ async def notify_subscription_ready(
     if not user.telegram_id:
         return
     data = serialize_subscription(sub, settings) or {}
-    sub_url = data.get("sub_url") or ""
-    happ = data.get("happ_deep_link") or ""
+    plan = data.get("plan") or {}
+    plan_name = plan.get("name") or (
+        "Пробный период" if sub.status == SubscriptionStatus.trial else "VPN-доступ"
+    )
+    ends = sub.ends_at
+    ends_label = f"{ends.day:02d}.{ends.month:02d}.{ends.year}"
+    limit = data.get("traffic_limit_gb")
+    traffic = "безлимит" if limit is None else f"{limit} ГБ"
+    open_url = data.get("happ_open_url") or data.get("sub_url") or ""
     text = (
         f"✅ <b>{title}</b>\n\n"
-        f"Статус: <b>{sub.status.value}</b>\n"
-        f"До: <b>{sub.ends_at.isoformat()}</b>\n"
-        f"Трафик: {sub.traffic_used_gb} / {sub.traffic_limit_gb if sub.traffic_limit_gb is not None else '∞'} GB\n"
-        f"Устройств: {sub.device_limit}\n\n"
-        f"Ссылка подписки:\n<code>{sub_url}</code>\n\n"
-        f"Happ deep link:\n<code>{happ}</code>\n\n"
-        "Откройте Happ → + → Импорт из URL и вставьте ссылку."
+        f"Тариф: <b>{plan_name}</b>\n"
+        f"Действует до: <b>{ends_label}</b>\n"
+        f"Трафик: <b>{traffic}</b>\n"
+        f"Устройств: <b>{sub.device_limit}</b>\n\n"
+        "Нажмите кнопку ниже — Happ откроется и подписка добавится сама."
     )
-    # Telegram inline URL buttons support only http/https (not happ://)
     markup = None
-    if sub_url.startswith("http"):
+    if open_url.startswith("http"):
         markup = {
             "inline_keyboard": [
-                [{"text": "🔗 Открыть subscription URL", "url": sub_url}],
+                [{"text": "🚀 Открыть в Happ", "url": open_url}],
             ]
         }
     await send_telegram_message(int(user.telegram_id), text, settings=settings, reply_markup=markup)

@@ -26,6 +26,7 @@ from app.services.happ import (
     build_sub_status_text,
     build_sub_url,
     build_subscription_response,
+    header_safe_text,
 )
 from app.services.marzban import MarzbanClient
 from app.services.provisioning import (
@@ -94,7 +95,7 @@ async def subscription_proxy(
                 media_type="text/plain; charset=utf-8",
                 headers={
                     "announce": announce_header(msg),
-                    "sub-info-text": msg[:200],
+                    "sub-info-text": header_safe_text(msg[:200]),
                     "sub-info-color": "red",
                     "subscription-always-hwid-enable": "1",
                 },
@@ -108,7 +109,7 @@ async def subscription_proxy(
                 media_type="text/plain; charset=utf-8",
                 headers={
                     "announce": announce_header(msg),
-                    "sub-info-text": msg[:200],
+                    "sub-info-text": header_safe_text(msg[:200]),
                     "sub-info-color": "red",
                     "subscription-always-hwid-enable": "1",
                 },
@@ -134,7 +135,7 @@ async def subscription_proxy(
     # Fresh status text even when body is cached.
     status_text = build_sub_status_text(sub, devices_used=devices_used)
     headers["announce"] = announce_header(status_text)
-    headers["sub-info-text"] = status_text[:200]
+    headers["sub-info-text"] = header_safe_text(status_text[:200])
     return Response(content=body, media_type="text/plain; charset=utf-8", headers=headers)
 
 

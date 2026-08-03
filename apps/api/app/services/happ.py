@@ -103,6 +103,15 @@ def announce_header(text: str) -> str:
     return f"base64:{encoded}"
 
 
+def header_safe_text(text: str) -> str:
+    """HTTP headers must be latin-1; encode non-ASCII as base64 for Happ."""
+    try:
+        text.encode("latin-1")
+        return text
+    except UnicodeEncodeError:
+        return announce_header(text)
+
+
 def days_left(ends_at: datetime) -> int:
     now = datetime.now(timezone.utc)
     end = ends_at if ends_at.tzinfo else ends_at.replace(tzinfo=timezone.utc)
@@ -154,8 +163,8 @@ def build_subscription_response(
     used = float(subscription.traffic_used_gb or Decimal("0"))
     used_bytes = int(used * 1024**3)
     status_text = build_sub_status_text(subscription, devices_used=devices_used)
-    # Keep under Happ sub-info-text limit (200).
-    info_text = status_text[:200]
+    # Keep under Happ sub-info-text limit (200); header-safe for Starlette/latin-1.
+    info_text = header_safe_text(status_text[:200])
     headers = {
         "profile-title": profile_title_header(settings.happ_profile_title),
         "subscription-userinfo": subscription_userinfo(

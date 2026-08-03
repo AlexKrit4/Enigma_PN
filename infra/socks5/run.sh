@@ -4,22 +4,24 @@ set -euo pipefail
 
 DIR=/opt/socks5
 mkdir -p "$DIR"
-touch "$DIR/passwd" "$DIR/passwd.reload"
 
 cat > "$DIR/3proxy.cfg" <<'CFG'
-maxconn 2000
+maxconn 500
 nserver 1.1.1.1
 nserver 8.8.8.8
 nscache 65536
 timeouts 1 5 30 60 180 1800 15 60
-log /dev/stdout
-logformat "- %t %N.%p %E %U %C:%c %R:%r %O %I %h %T"
+log
 auth strong
 users $/etc/3proxy/passwd
 allow *
 socks -p40080
-monitor /etc/3proxy/passwd.reload
 CFG
+
+if [ ! -s "$DIR/passwd" ]; then
+  echo '_noop:CL:disabled' > "$DIR/passwd"
+fi
+touch "$DIR/passwd.reload"
 
 docker rm -f socks5 2>/dev/null || true
 docker pull 3proxy/3proxy:latest >/dev/null
@@ -27,10 +29,10 @@ docker run -d \
   --name socks5 \
   --restart unless-stopped \
   --network host \
+  --ulimit nofile=65535:65535 \
   -v "$DIR:/etc/3proxy" \
   3proxy/3proxy:latest
 
-# Host watcher: SIGHUP when API rewrites passwd / stamp
 cat > "$DIR/watch.sh" <<'EOF'
 #!/bin/sh
 PASSWD=/opt/socks5/passwd

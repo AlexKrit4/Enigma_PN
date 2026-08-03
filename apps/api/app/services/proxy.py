@@ -95,10 +95,13 @@ def write_socks_passwd(rows: list[ProxyAccess], settings: Settings | None = None
         password = (row.socks_password or "").replace(":", "").strip()
         if user and password:
             lines.append(f"{user}:CL:{password}")
+    # 3proxy rejects an empty users file ("Illegal seek") — keep a disabled noop.
+    if not lines:
+        lines = ["_noop:CL:disabled"]
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(("\n".join(lines) + ("\n" if lines else "")), encoding="utf-8")
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tmp.replace(path)
-    return len(lines)
+    return len([ln for ln in lines if not ln.startswith("_noop:")])
 
 
 def reload_socks_proxy(settings: Settings | None = None) -> None:

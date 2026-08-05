@@ -32,6 +32,10 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-enigma}:${POSTGRES_PASSWORD:-enigma}@postgres:5432/${POSTGRES_DB:-enigma_pn}
       REDIS_URL: redis://redis:6379/0
+      # Marzban on host is exposed to the bridge via socat :8001
+      MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -54,6 +58,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-enigma}:${POSTGRES_PASSWORD:-enigma}@postgres:5432/${POSTGRES_DB:-enigma_pn}
       REDIS_URL: redis://redis:6379/0
+      MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

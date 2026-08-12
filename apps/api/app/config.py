@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     happ_provider_id: str = ""
     happ_profile_title: str = "Enigma_PN"
 
+    # MTProto proxy for Telegram (mtg). DNS: tg.bigwinzone.ru → VPS IP
+    mtproto_enabled: bool = True
+    mtproto_host: str = "tg.bigwinzone.ru"
+    mtproto_port: int = 443
+    mtproto_secret: str = ""  # Fake-TLS secret starting with ee...
+    mtproto_fake_tls_domain: str = "www.google.com"
+
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod
     def parse_admin_ids(cls, value: Any) -> list[int]:

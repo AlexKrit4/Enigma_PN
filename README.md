@@ -21,6 +21,7 @@ docker compose up -d --build
 | [docs/USER_SETUP_CHECKLIST.md](docs/USER_SETUP_CHECKLIST.md) | Что настроить владельцу |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Production деплой |
 | [docs/MARZBAN_SETUP.md](docs/MARZBAN_SETUP.md) | Установка VPN-панели |
+| [docs/TELEGRAM_PROXY.md](docs/TELEGRAM_PROXY.md) | MTProto proxy (mtg) для Telegram |
 | [docs/HAPP_INTEGRATION.md](docs/HAPP_INTEGRATION.md) | Subscription / deep link |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Схема системы |
 | [docs/AGENT_PROMPT.md](docs/AGENT_PROMPT.md) | Полный продуктовый промпт |

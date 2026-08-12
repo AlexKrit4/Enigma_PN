@@ -6,7 +6,13 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from bot.api_client import ApiClient
 from bot.config import get_settings
-from bot.keyboards.common import main_menu, pay_keyboard, plans_keyboard, subscription_keyboard
+from bot.keyboards.common import (
+    main_menu,
+    pay_keyboard,
+    plans_keyboard,
+    subscription_keyboard,
+    telegram_proxy_keyboard,
+)
 
 router = Router()
 api = ApiClient()
@@ -126,9 +132,52 @@ async def cmd_help(message: Message) -> None:
         "2. Нажмите «Добавить в Happ» в боте\n"
         "3. Или: Happ → + → Импорт из URL → вставьте ссылку подписки\n"
         "4. Обновите подписку и подключитесь к серверу\n\n"
+        "Прокси только для Telegram: кнопка «🔌 Прокси Telegram» "
+        "(нужна активная подписка).\n\n"
         f"Сайт: https://{get_settings().domain}"
     )
     await message.answer(text)
+
+
+@router.message(Command("tgproxy"))
+@router.message(F.text == "🔌 Прокси Telegram")
+async def cmd_telegram_proxy(message: Message) -> None:
+    user = message.from_user
+    assert user
+    try:
+        data = await api.telegram_proxy(user.id, user.username)
+    except Exception as exc:
+        await message.answer(f"Не удалось получить прокси: {exc}")
+        return
+
+    if not data.get("has_active_subscription"):
+        await message.answer(
+            "Прокси доступен только с активной подпиской.\n"
+            "Откройте «🛒 Тарифы» или получите пробный период через /start."
+        )
+        return
+
+    if not data.get("ready"):
+        await message.answer(
+            "Прокси для Telegram пока настраивается на сервере.\n"
+            f"{data.get('message') or ''}\n\n"
+            "Напишите в поддержку — подскажем, когда будет готово."
+        )
+        return
+
+    https_url = data["https_url"]
+    host = data.get("host")
+    port = data.get("port")
+    await message.answer(
+        "🔌 <b>MTProto-прокси для Telegram</b>\n\n"
+        "Работает только для Telegram (не заменяет VPN в Happ).\n"
+        f"Сервер: <code>{host}</code>\n"
+        f"Порт: <code>{port}</code>\n\n"
+        "Нажмите кнопку ниже → «Подключиться к прокси».",
+        reply_markup=telegram_proxy_keyboard(https_url),
+        parse_mode="HTML",
+    )
+    await message.answer(f"Ссылка:\n<code>{https_url}</code>", parse_mode="HTML")
 
 
 @router.message(Command("support"))
@@ -190,7 +239,14 @@ async def forward_support(message: Message) -> None:
     settings = get_settings()
     if not settings.admin_telegram_ids:
         return
-    if message.text in {"🛒 Тарифы", "📱 Моя подписка", "❓ Помощь", "💬 Поддержка"}:
+    menu = {
+        "🛒 Тарифы",
+        "📱 Моя подписка",
+        "🔌 Прокси Telegram",
+        "❓ Помощь",
+        "💬 Поддержка",
+    }
+    if message.text in menu:
         return
     user = message.from_user
     assert user

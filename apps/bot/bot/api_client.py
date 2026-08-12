@@ -68,3 +68,10 @@ class ApiClient:
 
     async def admin_extend(self, telegram_id: int, days: int) -> dict:
         return await self._request("POST", f"/admin/users/{telegram_id}/extend", json={"days": days})
+
+    async def telegram_proxy(self, telegram_id: int, username: str | None) -> dict:
+        return await self._request(
+            "POST",
+            "/api/v1/telegram-proxy",
+            json={"telegram_id": telegram_id, "username": username},
+        )

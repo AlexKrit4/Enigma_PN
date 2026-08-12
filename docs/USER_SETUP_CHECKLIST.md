@@ -9,8 +9,16 @@
 - [x] Тарифы: «для себя» / «семейный» (засеяны в seed)
 - [x] Пробный период: **1 день, 5 GB, 1 устройство**
 - [x] Marzban: mock + инструкция `docs/MARZBAN_SETUP.md`
+- [x] MTProto proxy для Telegram: код + `docs/TELEGRAM_PROXY.md` (нужен VPS + DNS)
 
 ## Сделать вам сейчас
+
+### 0. Telegram MTProto proxy
+
+- [ ] DNS: **A** `tg.bigwinzone.ru` → IP VPS
+- [ ] Установить mtg: `docs/TELEGRAM_PROXY.md` или `infra/scripts/install-mtg.sh`
+- [ ] Прописать `MTPROTO_SECRET` / `MTPROTO_HOST` / `MTPROTO_PORT` в `.env`
+- [ ] Прислать агенту **IP VPS** (SSH) если нужна удалённая установка
 
 ### 1. Telegram numeric ID (обязательно для админки)
 

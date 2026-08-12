@@ -103,5 +103,17 @@ services:
       - api
       - web
 
+  # Optional: MTProto proxy on THIS host (only if port 443 is free).
+  # Prefer a dedicated VPS — see docs/TELEGRAM_PROXY.md
+  # Start: docker compose --profile mtg up -d mtg
+  mtg:
+    profiles: ["mtg"]
+    image: nineseconds/mtg:2
+    restart: unless-stopped
+    volumes:
+      - ./infra/mtg/config.toml:/config.toml:ro
+    ports:
+      - "${MTPROTO_PORT:-443}:3128"
+
 volumes:
   postgres_data:

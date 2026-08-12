@@ -20,7 +20,7 @@ from app.models.entities import (
     User,
     VpnNode,
 )
-from app.services.happ import build_happ_deep_link, build_happ_open_url, build_sub_url
+from app.services.happ import build_happ_deep_link, build_happ_open_url, build_sub_url, days_left
 from app.services.marzban import MarzbanClient, to_unix
 from app.services.telegram_notify import send_telegram_message
 
@@ -109,6 +109,7 @@ def serialize_subscription(
         "status": sub.status.value,
         "starts_at": sub.starts_at.isoformat() if sub.starts_at else None,
         "ends_at": sub.ends_at.isoformat() if sub.ends_at else None,
+        "days_left": days_left(sub.ends_at),
         "traffic_limit_gb": sub.traffic_limit_gb,
         "traffic_used_gb": str(sub.traffic_used_gb),
         "device_limit": sub.device_limit,

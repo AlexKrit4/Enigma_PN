@@ -172,6 +172,7 @@ export default function MiniAppPage() {
           god_mode_buy_mult?: number;
           bet_options?: number[];
           pending_bet_days?: number | null;
+          subscription?: Me["subscription"];
         }>("/api/v1/miniapp/casino/status", jwt);
         setCasinoEligible(Boolean(st.eligible));
         setCasinoHint(st.message);
@@ -188,6 +189,19 @@ export default function MiniAppPage() {
           typeof st.pending_bet_days === "number" ? st.pending_bet_days : null
         );
         if (st.paytable?.length) setPaytable(st.paytable);
+        if (st.subscription) {
+          setMe((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  subscription: {
+                    ...prev.subscription,
+                    ...st.subscription,
+                  },
+                }
+              : prev
+          );
+        }
       } catch {
         setCasinoEligible(false);
       }
@@ -238,6 +252,17 @@ export default function MiniAppPage() {
       cancelled = true;
     };
   }, [refreshMe]);
+
+  // Prefer live days_left; fall back to ends_at so buy buttons stay usable
+  const daysRemaining = useMemo(() => {
+    const left = me?.subscription?.days_left;
+    if (typeof left === "number" && Number.isFinite(left)) return left;
+    const ends = me?.subscription?.ends_at;
+    if (!ends) return 0;
+    const ms = new Date(ends).getTime() - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) return 0;
+    return Math.max(1, Math.ceil(ms / 86_400_000));
+  }, [me?.subscription?.days_left, me?.subscription?.ends_at]);
 
   const filteredPlans = useMemo(() => {
     if (planGroup === "custom") return [];
@@ -749,7 +774,7 @@ export default function MiniAppPage() {
               winReveal={winReveal}
               winRevealKey={winRevealKey}
               onWinRevealDone={onWinRevealDone}
-              daysLeft={me?.subscription?.days_left}
+              daysLeft={daysRemaining}
               paytable={paytable}
               betDays={pendingBetDays ?? betDays}
               inBonus={inBonus}
@@ -781,7 +806,7 @@ export default function MiniAppPage() {
                       type="button"
                       className="ma-btn ma-btn-ghost"
                       disabled={
-                        (me?.subscription?.days_left ?? 0) < bonusBuyMult * betDays ||
+                        daysRemaining < bonusBuyMult * betDays ||
                         buyingBonus ||
                         buyingGodMode ||
                         spinning ||
@@ -799,7 +824,7 @@ export default function MiniAppPage() {
                       type="button"
                       className="ma-btn ma-btn-ghost ma-btn-god"
                       disabled={
-                        (me?.subscription?.days_left ?? 0) < godModeBuyMult * betDays ||
+                        daysRemaining < godModeBuyMult * betDays ||
                         buyingBonus ||
                         buyingGodMode ||
                         spinning ||

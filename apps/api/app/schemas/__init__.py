@@ -40,6 +40,7 @@ class SubscriptionOut(BaseModel):
     status: str
     starts_at: datetime
     ends_at: datetime
+    days_left: int | None = None
     traffic_limit_gb: int | None
     traffic_used_gb: Decimal
     device_limit: int

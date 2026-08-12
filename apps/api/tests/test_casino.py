@@ -134,11 +134,36 @@ def test_pick_bonus_book_always_bonus() -> None:
 
 
 def test_bonus_buy_constants() -> None:
-    from app.services.casino import BONUS_BUY_DAYS, GOD_MODE_BUY_DAYS
+    from app.services.casino import BONUS_BUY_MULT, GOD_MODE_BUY_MULT, BET_OPTIONS
 
-    assert BONUS_BUY_DAYS == 15
-    assert GOD_MODE_BUY_DAYS == 80
+    assert BONUS_BUY_MULT == 15
+    assert GOD_MODE_BUY_MULT == 80
+    assert BET_OPTIONS == (1, 2, 3, 5, 10)
     assert BOOK_COUNT // BONUS_BOOK_COUNT == 75
+
+
+def test_normalize_bet_and_scale() -> None:
+    from app.services.casino import normalize_bet_days, scale_bonus_rounds, BonusRound
+
+    assert normalize_bet_days(5) == 5
+    try:
+        normalize_bet_days(7)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+    rounds = (
+        BonusRound(
+            grid=("🍒",) * 9,
+            winning_lines=(0,),
+            base_win=3,
+            x_hit=False,
+            multiplier=2,
+            win_days=6,
+        ),
+    )
+    scaled = scale_bonus_rounds(rounds, 3)
+    assert scaled[0]["base_win"] == 9
+    assert scaled[0]["win_days"] == 18
 
 
 def test_god_mode_pool() -> None:

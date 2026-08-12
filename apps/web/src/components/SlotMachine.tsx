@@ -60,6 +60,7 @@ type Props = {
   onWinRevealDone?: () => void;
   daysLeft?: number | null;
   paytable?: Array<{ symbol: string; pay: number; note?: string }>;
+  betDays?: number;
   inBonus?: boolean;
   multiplier?: number;
   bonusSpinsLeft?: number | null;
@@ -136,6 +137,7 @@ export function SlotMachine({
   onWinRevealDone,
   daysLeft,
   paytable,
+  betDays = 1,
   inBonus,
   multiplier = 1,
   bonusSpinsLeft,
@@ -647,12 +649,13 @@ export function SlotMachine({
       >
         {busy
           ? "Крутим…"
-          : spinLabel || (inBonus ? "Бонус…" : "Крутить (−1 день)")}
+          : spinLabel || (inBonus ? "Бонус…" : `Крутить (−${betDays} дн.)`)}
       </button>
 
       {message ? <p className="ma-casino-msg">{message}</p> : null}
       <p className="ma-muted tiny">
-        RTP 96% · макс. выигрыш 365 дней · осталось: <b>{daysLeft ?? "—"}</b>
+        Ставка <b>{betDays}</b> дн. · RTP 96% · макс. {365 * betDays} дн. · осталось:{" "}
+        <b>{daysLeft ?? "—"}</b>
       </p>
 
       {paytable?.length ? (
@@ -663,7 +666,7 @@ export function SlotMachine({
                 ? `${p.symbol}×3 → бонус`
                 : p.note === "mult"
                   ? `${p.symbol} → +1×`
-                  : `${p.symbol}×3 → ${p.pay}д`}
+                  : `${p.symbol}×3 → ${p.pay * betDays}д`}
             </span>
           ))}
         </div>

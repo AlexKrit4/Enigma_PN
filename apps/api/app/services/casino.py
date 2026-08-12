@@ -42,18 +42,23 @@ LINE_PAY: dict[str, int] = {
     "👑": 73,  # 5 lines × 73 = 365 jackpot
 }
 
-BET_DAYS = 1
-MIN_DAYS_TO_PLAY = 2
-JACKPOT_WIN_DAYS = 365  # full board: 5 × 👑 = 365
+BET_DAYS = 1  # legacy default / RTP unit
+BET_OPTIONS: tuple[int, ...] = (1, 2, 3, 5, 10)
+DEFAULT_BET_DAYS = 1
+MIN_DAYS_TO_PLAY = 2  # legacy for bet=1: need bet+1 days
+JACKPOT_WIN_DAYS = 365  # full board at 1× bet: 5 × 👑 = 365
 MAX_WIN_DAYS = JACKPOT_WIN_DAYS
 BONUS_ROUNDS = 7
-BONUS_BUY_DAYS = 15  # purchase: next spin is forced bonus book
-GOD_MODE_BUY_DAYS = 80  # purchase: next spin from 5-book pool (20% jackpot)
+BONUS_BUY_MULT = 15  # bonus buy cost = 15 × bet
+GOD_MODE_BUY_MULT = 80  # god mode buy cost = 80 × bet
+# Back-compat aliases (1× bet)
+BONUS_BUY_DAYS = BONUS_BUY_MULT
+GOD_MODE_BUY_DAYS = GOD_MODE_BUY_MULT
 GOD_MODE_NEAR_MISS_COUNT = 4
 GOD_MODE_JACKPOT_COUNT = 1
 BOOK_COUNT = 30_000
 BONUS_BOOK_COUNT = 400  # 1 in 75
-TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle
+TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle at 1× bet
 # Hit rate 25%: 7_100 regular wins + 400 bonus = 7_500 / 30_000
 BOOK_SEED = 20260812_06
 
@@ -618,14 +623,40 @@ def pick_god_mode_book(rng: Random | None = None) -> Book:
     return books[rng.randrange(len(books))]
 
 
-def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
+def normalize_bet_days(bet_days: int | None) -> int:
+    if bet_days is None:
+        return DEFAULT_BET_DAYS
+    if bet_days not in BET_OPTIONS:
+        raise ValueError(f"Ставка должна быть одной из: {', '.join(map(str, BET_OPTIONS))}")
+    return bet_days
+
+
+def scale_bonus_rounds(rounds: tuple[BonusRound, ...] | list, bet: int) -> list[dict]:
+    out: list[dict] = []
+    for r in rounds:
+        d = r.as_dict() if hasattr(r, "as_dict") else dict(r)
+        d["base_win"] = int(d.get("base_win", 0)) * bet
+        d["win_days"] = int(d.get("win_days", 0)) * bet
+        out.append(d)
+    return out
+
+
+def casino_eligible(
+    sub: Subscription | None,
+    bet_days: int = DEFAULT_BET_DAYS,
+    *,
+    free_spin: bool = False,
+) -> tuple[bool, str]:
     if not sub:
         return False, "Нужна активная подписка."
     if sub.traffic_limit_gb is not None:
         return False, "Казино доступно только при безлимитном трафике (вечный тариф)."
+    if free_spin:
+        return True, "OK"
     left = days_left(sub.ends_at)
-    if left < MIN_DAYS_TO_PLAY:
-        return False, f"Нужно минимум {MIN_DAYS_TO_PLAY} дня подписки, чтобы поставить {BET_DAYS} день."
+    need = bet_days + 1
+    if left < need:
+        return False, f"Нужно минимум {need} дня подписки, чтобы поставить {bet_days} дн."
     return True, "OK"
 
 
@@ -634,8 +665,9 @@ def bonus_buy_eligible(
     *,
     pending: bool,
     god_mode_pending: bool = False,
+    bet_days: int = DEFAULT_BET_DAYS,
 ) -> tuple[bool, str]:
-    ok, msg = casino_eligible(sub)
+    ok, msg = casino_eligible(sub, bet_days=DEFAULT_BET_DAYS, free_spin=True)
     if not ok:
         return False, msg
     if pending:
@@ -643,10 +675,14 @@ def bonus_buy_eligible(
     if god_mode_pending:
         return False, "Сначала сыграйте купленный GOD MODE."
     assert sub is not None
+    try:
+        bet = normalize_bet_days(bet_days)
+    except ValueError as exc:
+        return False, str(exc)
+    cost = BONUS_BUY_MULT * bet
     left = days_left(sub.ends_at)
-    need = BONUS_BUY_DAYS + MIN_DAYS_TO_PLAY
-    if left < need:
-        return False, f"Нужно минимум {need} дней: {BONUS_BUY_DAYS} за покупку + запас на спин."
+    if left < cost:
+        return False, f"Нужно минимум {cost} дней ({BONUS_BUY_MULT}× ставка {bet})."
     return True, "OK"
 
 
@@ -655,8 +691,9 @@ def god_mode_buy_eligible(
     *,
     pending: bool,
     bonus_pending: bool = False,
+    bet_days: int = DEFAULT_BET_DAYS,
 ) -> tuple[bool, str]:
-    ok, msg = casino_eligible(sub)
+    ok, msg = casino_eligible(sub, bet_days=DEFAULT_BET_DAYS, free_spin=True)
     if not ok:
         return False, msg
     if pending:
@@ -664,10 +701,14 @@ def god_mode_buy_eligible(
     if bonus_pending:
         return False, "Сначала сыграйте купленный бонус."
     assert sub is not None
+    try:
+        bet = normalize_bet_days(bet_days)
+    except ValueError as exc:
+        return False, str(exc)
+    cost = GOD_MODE_BUY_MULT * bet
     left = days_left(sub.ends_at)
-    need = GOD_MODE_BUY_DAYS + MIN_DAYS_TO_PLAY
-    if left < need:
-        return False, f"Нужно минимум {need} дней: {GOD_MODE_BUY_DAYS} за покупку + запас на спин."
+    if left < cost:
+        return False, f"Нужно минимум {cost} дней ({GOD_MODE_BUY_MULT}× ставка {bet})."
     return True, "OK"
 
 
@@ -693,49 +734,64 @@ async def buy_casino_bonus(
     *,
     user: User,
     settings: Settings | None = None,
+    bet_days: int = DEFAULT_BET_DAYS,
 ) -> BuyBonusResult:
-    """Charge BONUS_BUY_DAYS; next spin will force a bonus book."""
+    """Charge BONUS_BUY_MULT × bet; next spin forces a bonus book (free activation)."""
     settings = settings or get_settings()
     if not settings.casino_enabled:
         return BuyBonusResult(
             ok=False,
             message="Казино временно выключено.",
-            cost_days=BONUS_BUY_DAYS,
+            cost_days=BONUS_BUY_MULT * DEFAULT_BET_DAYS,
             days_left=None,
             subscription=None,
         )
 
+    try:
+        bet = normalize_bet_days(bet_days)
+    except ValueError as exc:
+        return BuyBonusResult(
+            ok=False,
+            message=str(exc),
+            cost_days=BONUS_BUY_MULT * DEFAULT_BET_DAYS,
+            days_left=None,
+            subscription=None,
+        )
+
+    cost = BONUS_BUY_MULT * bet
     sub = await get_active_subscription(db, user.id)
     ok, msg = bonus_buy_eligible(
         sub,
         pending=bool(user.casino_bonus_pending),
         god_mode_pending=bool(user.casino_god_mode_pending),
+        bet_days=bet,
     )
     if not ok or sub is None:
         return BuyBonusResult(
             ok=False,
             message=msg,
-            cost_days=BONUS_BUY_DAYS,
+            cost_days=cost,
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
             bonus_pending=bool(user.casino_bonus_pending),
             god_mode_pending=bool(user.casino_god_mode_pending),
         )
 
-    now = _now()
-    sub.ends_at = sub.ends_at - timedelta(days=BONUS_BUY_DAYS)
-    if sub.ends_at <= now:
-        sub.status = SubscriptionStatus.expired
+    sub.ends_at = sub.ends_at - timedelta(days=cost)
+    # Keep subscription playable for free activation spin even if days hit 0
+    if sub.status == SubscriptionStatus.expired:
+        sub.status = SubscriptionStatus.active
     user.casino_bonus_pending = True
+    user.casino_pending_bet_days = bet
 
     db.add(
         CasinoSpin(
             user_id=user.id,
             subscription_id=sub.id,
-            bet_days=BONUS_BUY_DAYS,
+            bet_days=cost,
             win_days=0,
-            net_days=-BONUS_BUY_DAYS,
-            grid=["BONUS_BUY"],
+            net_days=-cost,
+            grid=["BONUS_BUY", str(bet)],
             winning_lines=[],
         )
     )
@@ -747,8 +803,8 @@ async def buy_casino_bonus(
     sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
     return BuyBonusResult(
         ok=True,
-        message="Бонус куплен — следующий спин запустит бонусную игру.",
-        cost_days=BONUS_BUY_DAYS,
+        message=f"Бонус куплен (−{cost} дн.) — следующий спин бесплатно запустит бонусную игру.",
+        cost_days=cost,
         days_left=days_left(sub.ends_at),
         subscription=sub_data,
         bonus_pending=True,
@@ -761,49 +817,63 @@ async def buy_casino_god_mode(
     *,
     user: User,
     settings: Settings | None = None,
+    bet_days: int = DEFAULT_BET_DAYS,
 ) -> BuyGodModeResult:
-    """Charge GOD_MODE_BUY_DAYS; next spin picks from 5-book GOD MODE pool."""
+    """Charge GOD_MODE_BUY_MULT × bet; next spin from GOD MODE pool (free activation)."""
     settings = settings or get_settings()
     if not settings.casino_enabled:
         return BuyGodModeResult(
             ok=False,
             message="Казино временно выключено.",
-            cost_days=GOD_MODE_BUY_DAYS,
+            cost_days=GOD_MODE_BUY_MULT * DEFAULT_BET_DAYS,
             days_left=None,
             subscription=None,
         )
 
+    try:
+        bet = normalize_bet_days(bet_days)
+    except ValueError as exc:
+        return BuyGodModeResult(
+            ok=False,
+            message=str(exc),
+            cost_days=GOD_MODE_BUY_MULT * DEFAULT_BET_DAYS,
+            days_left=None,
+            subscription=None,
+        )
+
+    cost = GOD_MODE_BUY_MULT * bet
     sub = await get_active_subscription(db, user.id)
     ok, msg = god_mode_buy_eligible(
         sub,
         pending=bool(user.casino_god_mode_pending),
         bonus_pending=bool(user.casino_bonus_pending),
+        bet_days=bet,
     )
     if not ok or sub is None:
         return BuyGodModeResult(
             ok=False,
             message=msg,
-            cost_days=GOD_MODE_BUY_DAYS,
+            cost_days=cost,
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
             god_mode_pending=bool(user.casino_god_mode_pending),
             bonus_pending=bool(user.casino_bonus_pending),
         )
 
-    now = _now()
-    sub.ends_at = sub.ends_at - timedelta(days=GOD_MODE_BUY_DAYS)
-    if sub.ends_at <= now:
-        sub.status = SubscriptionStatus.expired
+    sub.ends_at = sub.ends_at - timedelta(days=cost)
+    if sub.status == SubscriptionStatus.expired:
+        sub.status = SubscriptionStatus.active
     user.casino_god_mode_pending = True
+    user.casino_pending_bet_days = bet
 
     db.add(
         CasinoSpin(
             user_id=user.id,
             subscription_id=sub.id,
-            bet_days=GOD_MODE_BUY_DAYS,
+            bet_days=cost,
             win_days=0,
-            net_days=-GOD_MODE_BUY_DAYS,
-            grid=["GOD_MODE_BUY"],
+            net_days=-cost,
+            grid=["GOD_MODE_BUY", str(bet)],
             winning_lines=[],
         )
     )
@@ -815,8 +885,8 @@ async def buy_casino_god_mode(
     sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
     return BuyGodModeResult(
         ok=True,
-        message="GOD MODE куплен — следующий спин из спецпула (20% джекпот).",
-        cost_days=GOD_MODE_BUY_DAYS,
+        message=f"GOD MODE куплен (−{cost} дн.) — следующий спин бесплатно из спецпула (20% джекпот).",
+        cost_days=cost,
         days_left=days_left(sub.ends_at),
         subscription=sub_data,
         god_mode_pending=True,
@@ -830,13 +900,14 @@ async def spin_casino(
     user: User,
     settings: Settings | None = None,
     seed: int | None = None,
+    bet_days: int = DEFAULT_BET_DAYS,
 ) -> SpinResult:
     settings = settings or get_settings()
     if not settings.casino_enabled:
         return SpinResult(
             ok=False,
             message="Казино временно выключено.",
-            bet_days=BET_DAYS,
+            bet_days=DEFAULT_BET_DAYS,
             win_days=0,
             net_days=0,
             grid=[],
@@ -846,13 +917,43 @@ async def spin_casino(
             subscription=None,
         )
 
+    bonus_bought = bool(user.casino_bonus_pending)
+    god_mode_bought = bool(user.casino_god_mode_pending)
+    free_spin = bonus_bought or god_mode_bought
+
+    try:
+        req_bet = normalize_bet_days(bet_days)
+    except ValueError as exc:
+        return SpinResult(
+            ok=False,
+            message=str(exc),
+            bet_days=DEFAULT_BET_DAYS,
+            win_days=0,
+            net_days=0,
+            grid=[],
+            winning_lines=[],
+            book_index=None,
+            days_left=None,
+            subscription=None,
+            bonus_pending=bonus_bought,
+            god_mode_pending=god_mode_bought,
+        )
+
+    # Feature activation uses the bet locked at purchase; spin itself is free
+    if free_spin:
+        scale_bet = max(1, int(user.casino_pending_bet_days or DEFAULT_BET_DAYS))
+        charge_bet = 0
+    else:
+        scale_bet = req_bet
+        charge_bet = req_bet
+
     sub = await get_active_subscription(db, user.id)
-    ok, msg = casino_eligible(sub)
+    ok, msg = casino_eligible(sub, bet_days=scale_bet if not free_spin else DEFAULT_BET_DAYS, free_spin=free_spin)
     if not ok or sub is None:
         return SpinResult(
             ok=False,
             message=msg,
-            bet_days=BET_DAYS,
+            bet_days=charge_bet,
             win_days=0,
             net_days=0,
             grid=[],
@@ -860,13 +961,11 @@ async def spin_casino(
             book_index=None,
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
-            bonus_pending=bool(user.casino_bonus_pending),
-            god_mode_pending=bool(user.casino_god_mode_pending),
+            bonus_pending=bonus_bought,
+            god_mode_pending=god_mode_bought,
         )
 
     rng = Random(seed) if seed is not None else None
-    bonus_bought = bool(user.casino_bonus_pending)
-    god_mode_bought = bool(user.casino_god_mode_pending)
     if bonus_bought:
         book = pick_bonus_book(rng)
         user.casino_bonus_pending = False
@@ -875,24 +974,28 @@ async def spin_casino(
         user.casino_god_mode_pending = False
     else:
         book = pick_book(rng)
-    payout = book.win_days
+
+    payout = book.win_days * scale_bet
     grid = list(book.grid)
     winning_lines = list(book.winning_lines)
-    bonus_payload = [r.as_dict() for r in book.bonus_rounds] if book.is_bonus else []
+    bonus_payload = scale_bonus_rounds(book.bonus_rounds, scale_bet) if book.is_bonus else []
 
     now = _now()
-    sub.ends_at = sub.ends_at - timedelta(days=BET_DAYS)
+    if charge_bet > 0:
+        sub.ends_at = sub.ends_at - timedelta(days=charge_bet)
     if payout > 0:
         base = sub.ends_at if sub.ends_at > now else now
         sub.ends_at = base + timedelta(days=payout)
     if sub.ends_at <= now:
         sub.status = SubscriptionStatus.expired
+    elif sub.status == SubscriptionStatus.expired:
+        sub.status = SubscriptionStatus.active
 
-    net = -BET_DAYS + payout
+    net = -charge_bet + payout
     spin = CasinoSpin(
         user_id=user.id,
         subscription_id=sub.id,
-        bet_days=BET_DAYS,
+        bet_days=charge_bet,
         win_days=payout,
         net_days=net,
         grid=grid,
@@ -908,7 +1011,7 @@ async def spin_casino(
     return SpinResult(
         ok=True,
         message="OK",
-        bet_days=BET_DAYS,
+        bet_days=charge_bet,
         win_days=payout,
         net_days=net,
         grid=grid,

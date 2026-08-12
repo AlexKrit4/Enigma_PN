@@ -116,14 +116,17 @@ export default function MiniAppPage() {
   const [casinoHint, setCasinoHint] = useState("");
   const [bonusPending, setBonusPending] = useState(false);
   const [bonusBuyEligible, setBonusBuyEligible] = useState(false);
-  const [bonusBuyDays, setBonusBuyDays] = useState(15);
+  const [bonusBuyMult, setBonusBuyMult] = useState(15);
   const [buyingBonus, setBuyingBonus] = useState(false);
   const [confirmBuyBonus, setConfirmBuyBonus] = useState(false);
   const [godModePending, setGodModePending] = useState(false);
   const [godModeBuyEligible, setGodModeBuyEligible] = useState(false);
-  const [godModeBuyDays, setGodModeBuyDays] = useState(80);
+  const [godModeBuyMult, setGodModeBuyMult] = useState(80);
   const [buyingGodMode, setBuyingGodMode] = useState(false);
   const [confirmBuyGodMode, setConfirmBuyGodMode] = useState(false);
+  const [betDays, setBetDays] = useState(1);
+  const [betOptions, setBetOptions] = useState<number[]>([1, 2, 3, 5, 10]);
+  const [pendingBetDays, setPendingBetDays] = useState<number | null>(null);
   const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number; note?: string }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [resultGrid, setResultGrid] = useState<string[] | null>(null);
@@ -162,18 +165,28 @@ export default function MiniAppPage() {
           bonus_pending?: boolean;
           bonus_buy_eligible?: boolean;
           bonus_buy_days?: number;
+          bonus_buy_mult?: number;
           god_mode_pending?: boolean;
           god_mode_buy_eligible?: boolean;
           god_mode_buy_days?: number;
+          god_mode_buy_mult?: number;
+          bet_options?: number[];
+          pending_bet_days?: number | null;
         }>("/api/v1/miniapp/casino/status", jwt);
         setCasinoEligible(Boolean(st.eligible));
         setCasinoHint(st.message);
         setBonusPending(Boolean(st.bonus_pending));
         setBonusBuyEligible(Boolean(st.bonus_buy_eligible));
-        if (typeof st.bonus_buy_days === "number") setBonusBuyDays(st.bonus_buy_days);
+        if (typeof st.bonus_buy_mult === "number") setBonusBuyMult(st.bonus_buy_mult);
+        else if (typeof st.bonus_buy_days === "number") setBonusBuyMult(st.bonus_buy_days);
         setGodModePending(Boolean(st.god_mode_pending));
         setGodModeBuyEligible(Boolean(st.god_mode_buy_eligible));
-        if (typeof st.god_mode_buy_days === "number") setGodModeBuyDays(st.god_mode_buy_days);
+        if (typeof st.god_mode_buy_mult === "number") setGodModeBuyMult(st.god_mode_buy_mult);
+        else if (typeof st.god_mode_buy_days === "number") setGodModeBuyMult(st.god_mode_buy_days);
+        if (st.bet_options?.length) setBetOptions(st.bet_options);
+        setPendingBetDays(
+          typeof st.pending_bet_days === "number" ? st.pending_bet_days : null
+        );
         if (st.paytable?.length) setPaytable(st.paytable);
       } catch {
         setCasinoEligible(false);
@@ -329,8 +342,9 @@ export default function MiniAppPage() {
         days_left: number;
         bonus_pending: boolean;
         subscription?: Me["subscription"];
-      }>("/api/v1/miniapp/casino/buy-bonus", token);
+      }>("/api/v1/miniapp/casino/buy-bonus", token, { bet_days: betDays });
       setBonusPending(Boolean(res.bonus_pending));
+      setPendingBetDays(betDays);
       setBonusBuyEligible(false);
       setGodModeBuyEligible(false);
       setCasinoMsg(res.message);
@@ -377,8 +391,9 @@ export default function MiniAppPage() {
         days_left: number;
         god_mode_pending: boolean;
         subscription?: Me["subscription"];
-      }>("/api/v1/miniapp/casino/buy-god-mode", token);
+      }>("/api/v1/miniapp/casino/buy-god-mode", token, { bet_days: betDays });
       setGodModePending(Boolean(res.god_mode_pending));
+      setPendingBetDays(betDays);
       setGodModeBuyEligible(false);
       setBonusBuyEligible(false);
       setCasinoMsg(res.message);
@@ -428,8 +443,10 @@ export default function MiniAppPage() {
         bonus_rounds?: BonusRoundView[];
         bonus_pending?: boolean;
         bonus_bought?: boolean;
+        god_mode_pending?: boolean;
+        god_mode_bought?: boolean;
         subscription?: Me["subscription"];
-      }>("/api/v1/miniapp/casino/spin", token);
+      }>("/api/v1/miniapp/casino/spin", token, { bet_days: betDays });
       pendingBookRef.current = res.grid;
       pendingWinDaysRef.current = res.win_days || 0;
       if (res.is_bonus && res.bonus_rounds?.length) {
@@ -442,6 +459,11 @@ export default function MiniAppPage() {
         !res.is_bonus && res.win_days > 0 ? `+${res.win_days} дн.` : "";
       setResultGrid(res.grid);
       setWinLines(res.winning_lines || []);
+      if (res.bonus_bought || res.god_mode_bought) {
+        setBonusPending(false);
+        setGodModePending(false);
+        setPendingBetDays(null);
+      }
       await refreshMe(token);
     } catch (e) {
       setCasinoMsg(e instanceof Error ? e.message : String(e));
@@ -690,10 +712,28 @@ export default function MiniAppPage() {
           <div className="ma-card">
             <h2>Слот 3×3</h2>
             <p className="ma-muted">
-              Ставка 1 день · RTP 96% · макс. выигрыш 365 дней. В×3 — бонус 7 спинов. Только
+              RTP 96% · макс. {365 * betDays} дн. при ставке {betDays}. В×3 — бонус 7 спинов. Только
               безлимитный трафик.
             </p>
             {!casinoEligible ? <p className="ma-alert soft">{casinoHint || "Недоступно"}</p> : null}
+            {casinoEligible && !bonusPending && !godModePending ? (
+              <div className="ma-bet-row">
+                <span className="ma-muted tiny">Ставка</span>
+                <div className="ma-bet-options">
+                  {betOptions.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      className={betDays === b ? "active" : ""}
+                      disabled={spinning || inBonus || bonusIntro || bonusEndTotal != null}
+                      onClick={() => setBetDays(b)}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <SlotMachine
               grid={grid}
               resultGrid={resultGrid}
@@ -711,31 +751,37 @@ export default function MiniAppPage() {
               onWinRevealDone={onWinRevealDone}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}
+              betDays={pendingBetDays ?? betDays}
               inBonus={inBonus}
               multiplier={multiplier}
               bonusSpinsLeft={bonusSpinsLeft}
               bonusTotalDays={inBonus ? bonusAccum : null}
               spinLabel={
                 bonusPending
-                  ? "Запустить бонус (−1 день)"
+                  ? "Запустить бонус (бесплатно)"
                   : godModePending
-                    ? "GOD MODE (−1 день)"
+                    ? "GOD MODE (бесплатно)"
                     : undefined
               }
             />
             {casinoEligible ? (
               <div className="ma-bonus-buy">
                 {bonusPending ? (
-                  <p className="ma-alert soft">Бонус куплен — следующий спин запустит бонусную игру.</p>
+                  <p className="ma-alert soft">
+                    Бонус куплен (ставка {pendingBetDays ?? betDays}) — следующий спин бесплатно.
+                  </p>
                 ) : godModePending ? (
-                  <p className="ma-alert soft">GOD MODE куплен — следующий спин из спецпула (20% джекпот).</p>
+                  <p className="ma-alert soft">
+                    GOD MODE куплен (ставка {pendingBetDays ?? betDays}) — следующий спин бесплатно, 20%
+                    джекпот.
+                  </p>
                 ) : (
                   <>
                     <button
                       type="button"
                       className="ma-btn ma-btn-ghost"
                       disabled={
-                        !bonusBuyEligible ||
+                        (me?.subscription?.days_left ?? 0) < bonusBuyMult * betDays ||
                         buyingBonus ||
                         buyingGodMode ||
                         spinning ||
@@ -745,13 +791,15 @@ export default function MiniAppPage() {
                       }
                       onClick={() => setConfirmBuyBonus(true)}
                     >
-                      {buyingBonus ? "Покупка…" : `Купить бонус (−${bonusBuyDays} дн.)`}
+                      {buyingBonus
+                        ? "Покупка…"
+                        : `Купить бонус (−${bonusBuyMult * betDays} дн. · ${bonusBuyMult}×)`}
                     </button>
                     <button
                       type="button"
                       className="ma-btn ma-btn-ghost ma-btn-god"
                       disabled={
-                        !godModeBuyEligible ||
+                        (me?.subscription?.days_left ?? 0) < godModeBuyMult * betDays ||
                         buyingBonus ||
                         buyingGodMode ||
                         spinning ||
@@ -761,7 +809,9 @@ export default function MiniAppPage() {
                       }
                       onClick={() => setConfirmBuyGodMode(true)}
                     >
-                      {buyingGodMode ? "Покупка…" : `GOD MODE (−${godModeBuyDays} дн.)`}
+                      {buyingGodMode
+                        ? "Покупка…"
+                        : `GOD MODE (−${godModeBuyMult * betDays} дн. · ${godModeBuyMult}×)`}
                     </button>
                   </>
                 )}
@@ -776,7 +826,8 @@ export default function MiniAppPage() {
           <div className="ma-modal">
             <h3>Купить бонус?</h3>
             <p>
-              Спишется <b>{bonusBuyDays} дн.</b> Следующий спин (−1 день) запустит бонусную игру.
+              Спишется <b>{bonusBuyMult * betDays} дн.</b> ({bonusBuyMult}× ставка {betDays}). Следующий
+              спин <b>бесплатно</b> запустит бонусную игру.
             </p>
             <div className="ma-modal-actions">
               <button
@@ -805,8 +856,8 @@ export default function MiniAppPage() {
           <div className="ma-modal">
             <h3>Купить GOD MODE?</h3>
             <p>
-              Спишется <b>{godModeBuyDays} дн.</b> Следующий спин (−1 день) — шанс <b>20%</b> на
-              джекпот 365 дней (полная доска корон).
+              Спишется <b>{godModeBuyMult * betDays} дн.</b> ({godModeBuyMult}× ставка {betDays}).
+              Следующий спин <b>бесплатно</b> — шанс <b>20%</b> на джекпот {365 * betDays} дней.
             </p>
             <div className="ma-modal-actions">
               <button
@@ -984,6 +1035,37 @@ export default function MiniAppPage() {
           background: transparent;
           border: 1px solid rgba(196, 163, 90, 0.45);
           color: #e8d5a3;
+        }
+        .ma-bet-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+        .ma-bet-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .ma-bet-options button {
+          min-width: 2.4rem;
+          padding: 8px 10px;
+          border-radius: 10px;
+          border: 1px solid rgba(232, 238, 247, 0.14);
+          background: rgba(16, 32, 51, 0.7);
+          color: inherit;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .ma-bet-options button.active {
+          background: linear-gradient(180deg, #c4a35a, #9a7a35);
+          border-color: transparent;
+          color: #1a1205;
+        }
+        .ma-bet-options button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
         }
         .ma-bonus-buy {
           margin-top: 12px;

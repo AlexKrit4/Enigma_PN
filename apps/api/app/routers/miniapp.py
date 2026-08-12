@@ -13,10 +13,11 @@ from app.deps import create_access_token, get_current_user, get_or_create_telegr
 from app.models.entities import Plan, User
 from app.schemas import UserOut
 from app.services.casino import (
-    BET_DAYS,
-    BONUS_BUY_DAYS,
+    BET_OPTIONS,
+    BONUS_BUY_MULT,
     BOOK_COUNT,
-    GOD_MODE_BUY_DAYS,
+    DEFAULT_BET_DAYS,
+    GOD_MODE_BUY_MULT,
     MAX_WIN_DAYS,
     bonus_buy_eligible,
     books_rtp,
@@ -24,6 +25,7 @@ from app.services.casino import (
     buy_casino_god_mode,
     casino_eligible,
     god_mode_buy_eligible,
+    normalize_bet_days,
     paytable_public,
     spin_casino,
 )
@@ -58,6 +60,10 @@ class MiniAppCustomQuoteIn(BaseModel):
     traffic_gb: int
     days: int
     device_limit: int
+
+
+class CasinoBetIn(BaseModel):
+    bet_days: int = Field(default=DEFAULT_BET_DAYS)
 
 
 @router.post("/auth")
@@ -207,37 +213,45 @@ async def casino_status(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     sub = await get_active_subscription(db, user.id)
-    eligible, message = casino_eligible(sub)
+    pending_free = bool(user.casino_bonus_pending or user.casino_god_mode_pending)
+    eligible, message = casino_eligible(sub, free_spin=pending_free)
+    pending_bet = max(1, int(user.casino_pending_bet_days or DEFAULT_BET_DAYS))
     can_buy, buy_msg = bonus_buy_eligible(
         sub,
         pending=bool(user.casino_bonus_pending),
         god_mode_pending=bool(user.casino_god_mode_pending),
+        bet_days=DEFAULT_BET_DAYS,
     )
     can_god, god_msg = god_mode_buy_eligible(
         sub,
         pending=bool(user.casino_god_mode_pending),
         bonus_pending=bool(user.casino_bonus_pending),
+        bet_days=DEFAULT_BET_DAYS,
     )
     return {
         "enabled": settings.casino_enabled,
         "eligible": eligible and settings.casino_enabled,
         "message": message if settings.casino_enabled else "Казино выключено.",
-        "bet_days": BET_DAYS,
-        "bet_fixed": True,
+        "bet_days": DEFAULT_BET_DAYS,
+        "bet_options": list(BET_OPTIONS),
+        "bet_fixed": False,
         "rtp": books_rtp(),
         "books": BOOK_COUNT,
         "max_win_days": MAX_WIN_DAYS,
         "lines": 5,
         "grid": "3x3",
         "paytable": paytable_public(),
-        "bonus_buy_days": BONUS_BUY_DAYS,
+        "bonus_buy_mult": BONUS_BUY_MULT,
+        "bonus_buy_days": BONUS_BUY_MULT,  # at 1× bet
         "bonus_pending": bool(user.casino_bonus_pending),
         "bonus_buy_eligible": can_buy and settings.casino_enabled,
         "bonus_buy_message": buy_msg if settings.casino_enabled else "Казино выключено.",
-        "god_mode_buy_days": GOD_MODE_BUY_DAYS,
+        "god_mode_buy_mult": GOD_MODE_BUY_MULT,
+        "god_mode_buy_days": GOD_MODE_BUY_MULT,  # at 1× bet
         "god_mode_pending": bool(user.casino_god_mode_pending),
         "god_mode_buy_eligible": can_god and settings.casino_enabled,
         "god_mode_buy_message": god_msg if settings.casino_enabled else "Казино выключено.",
+        "pending_bet_days": pending_bet if pending_free else None,
         "subscription": await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
         if sub
         else None,
@@ -246,16 +260,22 @@ async def casino_status(
 
 @router.post("/casino/buy-bonus")
 async def casino_buy_bonus(
+    body: CasinoBetIn = CasinoBetIn(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    result = await buy_casino_bonus(db, user=user, settings=settings)
+    try:
+        bet = normalize_bet_days(body.bet_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await buy_casino_bonus(db, user=user, settings=settings, bet_days=bet)
     if not result.ok:
         raise HTTPException(status_code=400, detail=result.message)
     return {
         "ok": True,
         "cost_days": result.cost_days,
+        "bet_days": bet,
         "days_left": result.days_left,
         "subscription": result.subscription,
         "bonus_pending": result.bonus_pending,
@@ -266,16 +286,22 @@ async def casino_buy_bonus(
 
 @router.post("/casino/buy-god-mode")
 async def casino_buy_god_mode(
+    body: CasinoBetIn = CasinoBetIn(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    result = await buy_casino_god_mode(db, user=user, settings=settings)
+    try:
+        bet = normalize_bet_days(body.bet_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await buy_casino_god_mode(db, user=user, settings=settings, bet_days=bet)
     if not result.ok:
         raise HTTPException(status_code=400, detail=result.message)
     return {
         "ok": True,
         "cost_days": result.cost_days,
+        "bet_days": bet,
         "days_left": result.days_left,
         "subscription": result.subscription,
         "god_mode_pending": result.god_mode_pending,
@@ -286,11 +312,16 @@ async def casino_buy_god_mode(
 
 @router.post("/casino/spin")
 async def casino_spin(
+    body: CasinoBetIn = CasinoBetIn(),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    result = await spin_casino(db, user=user, settings=settings)
+    try:
+        bet = normalize_bet_days(body.bet_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await spin_casino(db, user=user, settings=settings, bet_days=bet)
     if not result.ok:
         raise HTTPException(status_code=400, detail=result.message)
     return {

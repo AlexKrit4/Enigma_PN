@@ -118,6 +118,7 @@ export default function MiniAppPage() {
   const [bonusBuyEligible, setBonusBuyEligible] = useState(false);
   const [bonusBuyDays, setBonusBuyDays] = useState(15);
   const [buyingBonus, setBuyingBonus] = useState(false);
+  const [confirmBuyBonus, setConfirmBuyBonus] = useState(false);
   const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number; note?: string }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [resultGrid, setResultGrid] = useState<string[] | null>(null);
@@ -307,6 +308,7 @@ export default function MiniAppPage() {
 
   async function buyBonus() {
     if (!token || buyingBonus || spinning || inBonus || bonusIntro || bonusPending) return;
+    setConfirmBuyBonus(false);
     setBuyingBonus(true);
     setCasinoMsg("");
     try {
@@ -670,7 +672,7 @@ export default function MiniAppPage() {
                       bonusIntro ||
                       bonusEndTotal != null
                     }
-                    onClick={buyBonus}
+                    onClick={() => setConfirmBuyBonus(true)}
                   >
                     {buyingBonus ? "Покупка…" : `Купить бонус (−${bonusBuyDays} дн.)`}
                   </button>
@@ -679,6 +681,35 @@ export default function MiniAppPage() {
             ) : null}
           </div>
         </section>
+      ) : null}
+
+      {confirmBuyBonus ? (
+        <div className="ma-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="ma-modal">
+            <h3>Купить бонус?</h3>
+            <p>
+              Спишется <b>{bonusBuyDays} дн.</b> Следующий спин (−1 день) запустит бонусную игру.
+            </p>
+            <div className="ma-modal-actions">
+              <button
+                type="button"
+                className="ma-btn ma-btn-primary"
+                disabled={buyingBonus}
+                onClick={buyBonus}
+              >
+                Да
+              </button>
+              <button
+                type="button"
+                className="ma-btn"
+                disabled={buyingBonus}
+                onClick={() => setConfirmBuyBonus(false)}
+              >
+                Нет
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {bonusIntro ? (
@@ -948,6 +979,12 @@ export default function MiniAppPage() {
           margin: 0;
           color: rgba(232, 238, 247, 0.78);
           line-height: 1.4;
+        }
+        .ma-modal-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 4px;
         }
         .ma-devices {
           list-style: none;

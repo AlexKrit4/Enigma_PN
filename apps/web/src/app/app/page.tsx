@@ -570,7 +570,8 @@ export default function MiniAppPage() {
               onSpin={spin}
               onSettled={onSpinSettled}
               message={casinoMsg}
-              toast={slotToast ? `${slotToast}#${toastKey}` : null}
+              toast={slotToast}
+              toastKey={toastKey}
               onToastDone={() => setSlotToast(null)}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}

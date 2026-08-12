@@ -46,6 +46,7 @@ type Props = {
   message?: string;
   /** Win toast inside the slot frame, e.g. "+5 дн." */
   toast?: string | null;
+  toastKey?: number;
   onToastDone?: () => void;
   daysLeft?: number | null;
   paytable?: Array<{ symbol: string; pay: number; note?: string }>;
@@ -114,6 +115,7 @@ export function SlotMachine({
   onSettled,
   message,
   toast,
+  toastKey = 0,
   onToastDone,
   daysLeft,
   paytable,
@@ -204,7 +206,8 @@ export function SlotMachine({
       window.clearTimeout(tOut);
       window.clearTimeout(tDone);
     };
-  }, [toast, onToastDone]);
+    // toastKey forces re-run for identical text
+  }, [toast, toastKey, onToastDone]);
 
   // Idle
   useEffect(() => {

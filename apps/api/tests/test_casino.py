@@ -80,6 +80,18 @@ def test_bonus_trigger_one_scatter_per_reel() -> None:
             assert n == 1
 
 
+def test_bonus_rounds_honest_payout() -> None:
+    for book in (b for b in get_books() if b.is_bonus):
+        assert sum(r.win_days for r in book.bonus_rounds) == book.win_days
+        for r in book.bonus_rounds:
+            assert r.win_days == r.base_win * r.multiplier
+            if r.base_win > 0:
+                assert r.base_win in LINE_PAY.values()
+                assert r.winning_lines
+            else:
+                assert r.win_days == 0
+
+
 def test_books_grids_consistent() -> None:
     for book in get_books()[::211]:
         assert len(book.grid) == 9

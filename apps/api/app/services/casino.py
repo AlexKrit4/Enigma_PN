@@ -49,7 +49,7 @@ BONUS_ROUNDS = 7
 BOOK_COUNT = 20_000
 BONUS_BOOK_COUNT = 200  # 1 in 100
 TARGET_RETURN_DAYS = 19_200  # RTP 96% over full book cycle
-BOOK_SEED = 20260812_03
+BOOK_SEED = 20260812_04
 
 # Regular (non-bonus) book win amounts — sum = 17010 across 19800 books
 WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
@@ -292,63 +292,111 @@ def _fill_bonus_round_grid(
     return cells, winning_lines, base, x_hit
 
 
+def _solve_honest_bases(mults: list[int], target: int, rng: Random) -> list[int] | None:
+    """
+    Pick LINE_PAY bases (or 0) so sum(base[i]*mults[i]) == target exactly.
+    Returns bases or None if unreachable with this multiplier path.
+    """
+    valid = [0, *sorted(LINE_PAY.values())]
+    bases = [0] * len(mults)
+
+    # Greedy fill toward target with random order bias
+    order = list(range(len(mults)))
+    rng.shuffle(order)
+    remaining = target
+    for pos, i in enumerate(order):
+        m = mults[i]
+        last = pos == len(order) - 1
+        if last:
+            # Must finish exactly
+            if remaining == 0:
+                bases[i] = 0
+                continue
+            if remaining % m == 0 and (remaining // m) in LINE_PAY.values():
+                bases[i] = remaining // m
+                remaining = 0
+                continue
+            return None
+        # leave room for later rounds
+        max_here = remaining
+        choices = [b for b in valid if b * m <= max_here]
+        if not choices:
+            bases[i] = 0
+            continue
+        # prefer spreading: often zero, else near share
+        if rng.random() < 0.35:
+            bases[i] = 0
+        else:
+            share = remaining / max(1, len(order) - pos)
+            bases[i] = min(choices, key=lambda b: abs(b * m - share))
+        remaining -= bases[i] * m
+
+    if remaining != 0:
+        return None
+    if sum(b * m for b, m in zip(bases, mults)) != target:
+        return None
+    return bases
+
+
 def _build_bonus_book_body(total: int, rng: Random) -> tuple[list[str], list[int], tuple[BonusRound, ...]]:
     """
-    Build trigger (3×В) + 7 free spins whose credited win_days sum to `total`.
-    Multiplier starts at 1; each Х on a round bumps it by +1 before that round's pay.
+    Trigger (one «В» per reel) + 7 free spins.
+    Every credited day is exactly base_win × multiplier (no ghost top-ups).
     """
     trigger, trigger_lines = _fill_bonus_trigger(rng)
 
-    # Pre-roll which rounds get Х (affects multiplier path)
+    bases: list[int] | None = None
     x_flags: list[bool] = []
-    mult = 1
     mults_after: list[int] = []
-    for i in range(BONUS_ROUNDS):
-        want_x = rng.random() < (0.2 + 0.05 * i) and mult < 8
-        if want_x:
-            mult += 1
-        x_flags.append(want_x)
-        mults_after.append(mult)
 
-    # Plan credits that are achievable as base*mult for non-last rounds
-    valid_bases = [0, *sorted(LINE_PAY.values())]
-    remaining = total
-    planned: list[int] = [0] * BONUS_ROUNDS
-    for i in range(BONUS_ROUNDS - 1):
-        m = mults_after[i]
-        # Soft target share of remaining
-        share = remaining / (BONUS_ROUNDS - i)
-        if share <= 0 or rng.random() < 0.35:
-            planned[i] = 0
-            continue
-        candidates = [b * m for b in valid_bases if b * m <= remaining]
-        if not candidates:
-            planned[i] = 0
-            continue
-        # Prefer close to share
-        credit = min(candidates, key=lambda c: abs(c - share))
-        if rng.random() < 0.25:
-            credit = rng.choice(candidates)
-        planned[i] = credit
-        remaining -= credit
-    planned[-1] = max(0, remaining)
+    for _attempt in range(80):
+        x_flags = []
+        mult = 1
+        mults_after = []
+        for i in range(BONUS_ROUNDS):
+            want_x = rng.random() < (0.2 + 0.05 * i) and mult < 8
+            if want_x:
+                mult += 1
+            x_flags.append(want_x)
+            mults_after.append(mult)
+        bases = _solve_honest_bases(mults_after, total, rng)
+        if bases is not None:
+            break
+    else:
+        # Guaranteed reachable path: no X, pack pays that sum to total
+        x_flags = [False] * BONUS_ROUNDS
+        mults_after = [1] * BONUS_ROUNDS
+        bases = _solve_honest_bases(mults_after, total, rng)
+        if bases is None:
+            # Last resort: put total into one cherry-stacked path using only valid pays
+            # by splitting total into sum of LINE_PAY values across rounds (mult=1)
+            valid = sorted(LINE_PAY.values(), reverse=True)
+            bases = [0] * BONUS_ROUNDS
+            rem = total
+            for i in range(BONUS_ROUNDS):
+                for v in valid:
+                    if v <= rem:
+                        bases[i] = v
+                        rem -= v
+                        break
+            if rem != 0:
+                raise RuntimeError(f"Cannot build honest bonus body for total={total}")
 
     rounds: list[BonusRound] = []
     for i in range(BONUS_ROUNDS):
         m = mults_after[i]
-        credited = planned[i]
-        if credited <= 0:
-            base = 0
-        elif credited % m == 0 and (credited // m) in LINE_PAY.values():
-            base = credited // m
-        else:
-            # Pick visual base closest to credited/m; lock credited for RTP
-            ideal = max(0, round(credited / m))
-            base = min(valid_bases, key=lambda v: abs(v - ideal))
-
+        base = bases[i]
+        credited = base * m
         grid, lines, base_out, _x = _fill_bonus_round_grid(
             rng, want_x=x_flags[i], want_base=base if base in LINE_PAY.values() else 0
         )
+        # Grid builder must return the requested base
+        if base_out != base:
+            # rebuild once more strictly
+            grid, lines, base_out, _x = _fill_bonus_round_grid(
+                rng, want_x=x_flags[i], want_base=base if base > 0 else 0
+            )
+        assert base_out == base or (base == 0 and base_out == 0)
         rounds.append(
             BonusRound(
                 grid=tuple(grid),
@@ -356,12 +404,12 @@ def _build_bonus_book_body(total: int, rng: Random) -> tuple[list[str], list[int
                 base_win=base_out,
                 x_hit=x_flags[i],
                 multiplier=m,
-                win_days=credited,
+                win_days=base_out * m,
             )
         )
 
     assert sum(r.win_days for r in rounds) == total
-    assert all(r.win_days >= 0 for r in rounds)
+    assert all(r.win_days == r.base_win * r.multiplier for r in rounds)
     assert len(rounds) == BONUS_ROUNDS
     return trigger, trigger_lines, tuple(rounds)
 
@@ -437,10 +485,15 @@ def get_books() -> tuple[Book, ...]:
             for r in b.bonus_rounds:
                 assert BONUS_SYMBOL not in r.grid
                 assert r.win_days >= 0
+                assert r.win_days == r.base_win * r.multiplier
                 if r.x_hit:
                     assert MULT_SYMBOL in r.grid
                 else:
                     assert MULT_SYMBOL not in r.grid
+                if r.base_win > 0:
+                    assert r.winning_lines
+                else:
+                    assert not r.winning_lines or r.win_days == 0
         else:
             assert _count_symbol(b.grid, BONUS_SYMBOL) < 3
             assert MULT_SYMBOL not in b.grid

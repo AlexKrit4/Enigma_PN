@@ -32,6 +32,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-enigma}:${POSTGRES_PASSWORD:-enigma}@postgres:5432/${POSTGRES_DB:-enigma_pn}
       REDIS_URL: redis://redis:6379/0
+      MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -41,6 +44,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: >
       sh -c "alembic upgrade head &&
              python -m app.seed &&
@@ -53,6 +57,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-enigma}:${POSTGRES_PASSWORD:-enigma}@postgres:5432/${POSTGRES_DB:-enigma_pn}
       REDIS_URL: redis://redis:6379/0
+      MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +67,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: arq app.workers.settings.WorkerSettings
 
   bot:
@@ -77,21 +85,16 @@ services:
   web:
     build:
       context: ./apps/web
-      target: deps
     env_file: .env
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-Enigma_PN}
       NEXT_PUBLIC_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-enigmapnbot}
       NEXT_PUBLIC_DOMAIN: ${DOMAIN:-bigwinzone.ru}
     ports:
       - "3000:3000"
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
     depends_on:
       - api
-    command: sh -c "npm install && npm run dev"
 
   nginx:
     image: nginx:1.27-alpine
@@ -102,6 +105,18 @@ services:
     depends_on:
       - api
       - web
+
+  # Optional local mtg (prod uses host docker + HAProxy SNI on :443).
+  # Start: docker compose --profile mtg up -d mtg
+  mtg:
+    profiles: ["mtg"]
+    image: nineseconds/mtg:2
+    restart: unless-stopped
+    command: ["run", "/config/config.toml"]
+    volumes:
+      - ./infra/mtg/config.toml:/config/config.toml:ro
+    ports:
+      - "127.0.0.1:3128:3128"
 
 volumes:
   postgres_data:

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import from_url as redis_from_url
 
 from app.config import get_settings
-from app.routers import admin, auth, orders, plans, subscription
+from app.routers import admin, auth, miniapp, orders, plans, subscription, telegram_proxy
 
 structlog.configure(
     processors=[
@@ -43,6 +43,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(orders.router)
     app.include_router(subscription.router)
+    app.include_router(miniapp.router)
+    app.include_router(telegram_proxy.router)
     app.include_router(admin.router)
 
     @app.get("/health")

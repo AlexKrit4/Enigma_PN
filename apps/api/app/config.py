@@ -69,13 +69,13 @@ class Settings(BaseSettings):
     socks5_passwd_path: str = "/opt/socks5/passwd"
     socks5_container: str = "socks5"
 
-    # Shared MTProto (mtg Fake-TLS) for Telegram — только подписчикам.
-    # DNS: tg.bigwinzone.ru → VPS. Public :443 via HAProxy SNI → mtg.
+    # Shared MTProto (teleproxy Fake-TLS) for Telegram — только подписчикам.
+    # DNS: tg.bigwinzone.ru → VPS. Public :443 owned by teleproxy (not HAProxy).
     mtproto_enabled: bool = False
     mtproto_host: str = "tg.bigwinzone.ru"
     mtproto_port: int = 443
-    mtproto_secret: str = ""  # Fake-TLS secret starting with ee...
-    mtproto_fake_tls_domain: str = "www.google.com"
+    mtproto_secret: str = ""  # ee + key + hex(MTPROTO_FAKE_TLS_DOMAIN)
+    mtproto_fake_tls_domain: str = "bigwinzone.ru"
 
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod

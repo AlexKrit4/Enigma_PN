@@ -82,6 +82,7 @@ services:
   web:
     build:
       context: ./apps/web
+      target: runner
       args:
         NEXT_PUBLIC_API_URL: https://${API_DOMAIN:-api.bigwinzone.ru}
         NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-Enigma_PN}
@@ -93,6 +94,8 @@ services:
       NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-Enigma_PN}
       NEXT_PUBLIC_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-enigmapnbot}
       NEXT_PUBLIC_DOMAIN: ${DOMAIN:-bigwinzone.ru}
+    command: ["npm", "run", "start"]
+    volumes: []
     depends_on:
       - api
 

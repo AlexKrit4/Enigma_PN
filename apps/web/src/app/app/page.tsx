@@ -557,7 +557,7 @@ export default function MiniAppPage() {
           <div className="ma-card">
             <h2>Слот 3×3</h2>
             <p className="ma-muted">
-              Ставка 1 день · RTP 96% · макс. выигрыш 30 дней. В×3 — бонус 7 спинов. Только
+              Ставка 1 день · RTP 96% · макс. выигрыш 365 дней. В×3 — бонус 7 спинов. Только
               безлимитный трафик.
             </p>
             {!casinoEligible ? <p className="ma-alert soft">{casinoHint || "Недоступно"}</p> : null}

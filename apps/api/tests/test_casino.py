@@ -9,9 +9,11 @@ from app.services.casino import (
     BONUS_SYMBOL,
     BONUS_WIN_COUNTS,
     BOOK_COUNT,
+    JACKPOT_WIN_DAYS,
     LINE_PAY,
     MAX_WIN_DAYS,
     MULT_SYMBOL,
+    PAYLINES,
     TARGET_RETURN_DAYS,
     WIN_BOOK_COUNTS,
     books_rtp,
@@ -26,7 +28,8 @@ def test_books_count_and_rtp() -> None:
     assert sum(b.win_days for b in books) == TARGET_RETURN_DAYS
     assert books_rtp() == 0.96
     assert sum(1 for b in books if b.is_bonus) == BONUS_BOOK_COUNT
-    assert BOOK_COUNT // BONUS_BOOK_COUNT == 100
+    assert BOOK_COUNT // BONUS_BOOK_COUNT == 75
+    assert sum(1 for b in books if b.win_days > 0) * 4 == BOOK_COUNT  # 25%
 
 
 def test_regular_distribution_matches_table() -> None:
@@ -44,6 +47,17 @@ def test_bonus_distribution_matches_table() -> None:
     counts = Counter(b.win_days for b in bonus)
     for amount, expected in BONUS_WIN_COUNTS:
         assert counts[amount] == expected
+
+
+def test_jackpot_full_crown_board() -> None:
+    jackpots = [b for b in get_books() if not b.is_bonus and b.win_days == JACKPOT_WIN_DAYS]
+    assert len(jackpots) == 1
+    book = jackpots[0]
+    assert book.win_days == 365
+    assert all(c == "👑" for c in book.grid)
+    assert set(book.winning_lines) == set(range(len(PAYLINES)))
+    assert LINE_PAY["👑"] == 75
+    assert MAX_WIN_DAYS == JACKPOT_WIN_DAYS == 365
 
 
 def test_bonus_rounds_structure() -> None:
@@ -99,10 +113,11 @@ def test_books_grids_consistent() -> None:
             continue
         if book.win_days == 0:
             assert book.winning_lines == ()
+        elif book.win_days == JACKPOT_WIN_DAYS:
+            assert all(c == "👑" for c in book.grid)
+            assert set(book.winning_lines) == set(range(len(PAYLINES)))
         else:
             assert book.winning_lines
-            from app.services.casino import PAYLINES
-
             line = book.winning_lines[0]
             a, b, c = PAYLINES[line]
             assert book.grid[a] == book.grid[b] == book.grid[c]

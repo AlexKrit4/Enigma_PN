@@ -522,7 +522,7 @@ export function SlotMachine({
 
       {message ? <p className="ma-casino-msg">{message}</p> : null}
       <p className="ma-muted tiny">
-        RTP 96% · макс. выигрыш 30 дней · осталось: <b>{daysLeft ?? "—"}</b>
+        RTP 96% · макс. выигрыш 365 дней · осталось: <b>{daysLeft ?? "—"}</b>
       </p>
 
       {paytable?.length ? (

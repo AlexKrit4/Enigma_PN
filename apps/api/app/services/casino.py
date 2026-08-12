@@ -39,38 +39,43 @@ LINE_PAY: dict[str, int] = {
     "⭐": 5,
     "💎": 10,
     "7️⃣": 15,
-    "👑": 30,
+    "👑": 75,
 }
 
 BET_DAYS = 1
 MIN_DAYS_TO_PLAY = 2
-MAX_WIN_DAYS = 30  # max single-line / regular book
+JACKPOT_WIN_DAYS = 365  # 1 book: full board of crowns
+MAX_WIN_DAYS = JACKPOT_WIN_DAYS
 BONUS_ROUNDS = 7
-BOOK_COUNT = 20_000
-BONUS_BOOK_COUNT = 200  # 1 in 100
-TARGET_RETURN_DAYS = 19_200  # RTP 96% over full book cycle
-BOOK_SEED = 20260812_04
+BOOK_COUNT = 30_000
+BONUS_BOOK_COUNT = 400  # 1 in 75
+TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle
+# Hit rate 25%: 7_100 regular wins + 400 bonus = 7_500 / 30_000
+BOOK_SEED = 20260812_05
 
-# Regular (non-bonus) book win amounts — sum = 17010 across 19800 books
+# Regular (non-bonus) wins — sum = 24_302 across 7_100 books (rest are zeros)
 WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
-    (30, 30),  # 900
-    (15, 60),  # 900
-    (10, 150),  # 1500
-    (5, 300),  # 1500
-    (3, 600),  # 1800
-    (2, 1200),  # 2400
-    (1, 8010),  # 8010
+    (365, 1),  # jackpot: full 👑 board
+    (75, 43),  # 3225
+    (15, 204),  # 3060
+    (10, 400),  # 4000
+    (5, 800),  # 4000
+    (3, 1200),  # 3600
+    (2, 1600),  # 3200
+    (1, 2852),  # 2852
 )
 
-# Bonus books (200): total days credited for trigger + 7 free spins — sum = 2190
+# Bonus books (400): free-spin totals — sum = 4_498
 BONUS_WIN_COUNTS: tuple[tuple[int, int], ...] = (
-    (25, 10),  # 250
-    (20, 20),  # 400
-    (15, 30),  # 450
-    (12, 40),  # 480
-    (8, 50),  # 400
-    (5, 30),  # 150
-    (3, 20),  # 60
+    (50, 10),  # 500
+    (30, 20),  # 600
+    (20, 40),  # 800
+    (15, 50),  # 750
+    (10, 80),  # 800
+    (8, 60),  # 480
+    (5, 84),  # 420
+    (3, 36),  # 108
+    (2, 20),  # 40
 )
 
 
@@ -185,7 +190,17 @@ def _fill_loss_grid(rng: Random) -> tuple[list[str], list[int]]:
     return cells, []
 
 
+def _fill_jackpot_grid() -> tuple[list[str], list[int]]:
+    """Exactly one book: all nine crowns — jackpot credit (not 5× line pay)."""
+    cells = ["👑"] * 9
+    winning_lines = list(range(len(PAYLINES)))
+    return cells, winning_lines
+
+
 def _fill_win_grid(payout: int, rng: Random) -> tuple[list[str], list[int]]:
+    if payout == JACKPOT_WIN_DAYS:
+        return _fill_jackpot_grid()
+
     cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
     symbol = next((s for s, pay in LINE_PAY.items() if pay == payout), None)
     if symbol is None:
@@ -475,6 +490,12 @@ def get_books() -> tuple[Book, ...]:
     assert sum(b.win_days for b in books) == TARGET_RETURN_DAYS
     assert sum(1 for b in books if b.is_bonus) == BONUS_BOOK_COUNT
     assert max((b.win_days for b in books if not b.is_bonus), default=0) <= MAX_WIN_DAYS
+    jackpots = [b for b in books if not b.is_bonus and b.win_days == JACKPOT_WIN_DAYS]
+    assert len(jackpots) == 1
+    assert all(c == "👑" for c in jackpots[0].grid)
+    assert set(jackpots[0].winning_lines) == set(range(len(PAYLINES)))
+    hit = sum(1 for b in books if b.win_days > 0)
+    assert hit * 4 == BOOK_COUNT  # 25% hit rate
     for b in books:
         assert _scatters_per_reel_ok(b.grid)
         if b.is_bonus:

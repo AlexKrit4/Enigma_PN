@@ -10,8 +10,7 @@ def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🛒 Тарифы"), KeyboardButton(text="📱 Моя подписка")],
-            [KeyboardButton(text="🔌 Прокси Telegram"), KeyboardButton(text="❓ Помощь")],
-            [KeyboardButton(text="💬 Поддержка")],
+            [KeyboardButton(text="❓ Помощь"), KeyboardButton(text="💬 Поддержка")],
         ],
         resize_keyboard=True,
     )
@@ -159,12 +158,6 @@ def devices_keyboard(devices: list[dict]) -> InlineKeyboardMarkup:
 def pay_keyboard(payment_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="💳 Оплатить через ЮMoney", url=payment_url)]]
-    )
-
-
-def telegram_proxy_keyboard(https_url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="⚡ Подключить прокси", url=https_url)]]
     )
 
 

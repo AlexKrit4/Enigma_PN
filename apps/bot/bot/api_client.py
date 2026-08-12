@@ -206,10 +206,3 @@ class ApiClient:
         if isinstance(data, bytes):
             return data
         return str(data).encode("utf-8")
-
-    async def telegram_proxy(self, telegram_id: int, username: str | None) -> dict:
-        return await self._request(
-            "POST",
-            "/api/v1/telegram-proxy",
-            json={"telegram_id": telegram_id, "username": username},
-        )

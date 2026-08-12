@@ -68,5 +68,5 @@ cp .env.example .env
 ### DNS для Telegram MTProto proxy
 
 - [ ] A-запись `tg` → IP VPS (`31.76.245.81`), полное имя `tg.bigwinzone.ru`
-- [ ] В `.env`: `MTPROTO_ENABLED=true`, `MTPROTO_HOST=tg.bigwinzone.ru`, `MTPROTO_PORT=8443`, `MTPROTO_SECRET=…`
+- [ ] В `.env`: `MTPROTO_ENABLED=true`, `MTPROTO_HOST=tg.bigwinzone.ru`, `MTPROTO_PORT=443`, `MTPROTO_SECRET=…`
 - Подробности: `docs/TELEGRAM_PROXY.md`

@@ -23,7 +23,8 @@ const SPIN_PAD = [10, 14, 18];
 const SPEED_PX = SPIN_SPEED * CELL;
 /** Extra travel on reel 3 when reels 1–2 already show «В». */
 const ANTICIPATION_SEC = 4;
-const TOAST_HOLD_MS = 2200;
+const TOAST_HOLD_MS = 1800;
+const MULT_FLY_MS = 650;
 
 export type BonusRoundView = {
   grid: string[];
@@ -32,6 +33,11 @@ export type BonusRoundView = {
   x_hit: boolean;
   multiplier: number;
   win_days: number;
+};
+
+export type WinReveal = {
+  baseDays: number;
+  multiplier: number;
 };
 
 type Props = {
@@ -44,10 +50,14 @@ type Props = {
   onSettled: () => void;
   /** Error / status under the slot (not win/loss copy). */
   message?: string;
-  /** Win toast inside the slot frame, e.g. "+5 дн." */
+  /** Simple win toast inside the slot frame, e.g. "+5 дн." */
   toast?: string | null;
   toastKey?: number;
   onToastDone?: () => void;
+  /** Bonus-style reveal: show base, then mult flies in and multiplies (≥2). */
+  winReveal?: WinReveal | null;
+  winRevealKey?: number;
+  onWinRevealDone?: () => void;
   daysLeft?: number | null;
   paytable?: Array<{ symbol: string; pay: number; note?: string }>;
   inBonus?: boolean;
@@ -117,6 +127,9 @@ export function SlotMachine({
   toast,
   toastKey = 0,
   onToastDone,
+  winReveal,
+  winRevealKey = 0,
+  onWinRevealDone,
   daysLeft,
   paytable,
   inBonus,
@@ -142,6 +155,8 @@ export function SlotMachine({
   const [anticipate, setAnticipate] = useState(false);
   const [localMult, setLocalMult] = useState(multiplier);
   const [fly, setFly] = useState<{
+    kind: "x" | "mult";
+    label: string;
     x: number;
     y: number;
     tx: number;
@@ -150,6 +165,8 @@ export function SlotMachine({
   } | null>(null);
   const [toastPhase, setToastPhase] = useState<"off" | "in" | "hold" | "out">("off");
   const [toastText, setToastText] = useState("");
+  const [toastPop, setToastPop] = useState(false);
+  const [multLaunching, setMultLaunching] = useState(false);
 
   const stripsRef = useRef(strips);
   const offsetsRef = useRef(offsets);
@@ -158,6 +175,8 @@ export function SlotMachine({
   const windowRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const multRef = useRef<HTMLSpanElement | null>(null);
+  const toastRef = useRef<HTMLDivElement | null>(null);
+  const revealBusy = useRef(false);
 
   useEffect(() => {
     stripsRef.current = strips;
@@ -185,15 +204,18 @@ export function SlotMachine({
     return () => ro.disconnect();
   }, []);
 
-  // Win toast lifecycle
+  // Simple win toast (non-reveal)
   useEffect(() => {
+    if (winReveal && winReveal.baseDays > 0) return;
     if (!toast) {
       setToastPhase("off");
       setToastText("");
+      setToastPop(false);
       return;
     }
     setToastText(toast);
     setToastPhase("in");
+    setToastPop(false);
     const tHold = window.setTimeout(() => setToastPhase("hold"), 280);
     const tOut = window.setTimeout(() => setToastPhase("out"), 280 + TOAST_HOLD_MS);
     const tDone = window.setTimeout(() => {
@@ -206,8 +228,91 @@ export function SlotMachine({
       window.clearTimeout(tOut);
       window.clearTimeout(tDone);
     };
-    // toastKey forces re-run for identical text
-  }, [toast, toastKey, onToastDone]);
+  }, [toast, toastKey, onToastDone, winReveal]);
+
+  // Bonus win reveal: +base → mult flies from top → +base*mult
+  useEffect(() => {
+    if (!winReveal || winReveal.baseDays <= 0) return;
+    let cancelled = false;
+    revealBusy.current = true;
+
+    const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+    (async () => {
+      const base = winReveal.baseDays;
+      const mult = Math.max(1, winReveal.multiplier);
+      setToastPop(false);
+      setToastText(`+${base} дн.`);
+      setToastPhase("in");
+      await sleep(280);
+      if (cancelled) return;
+      setToastPhase("hold");
+      await sleep(420);
+      if (cancelled) return;
+
+      if (mult >= 2 && frameRef.current && multRef.current) {
+        // Ensure toast node is measured
+        await sleep(30);
+        const toastEl = toastRef.current;
+        if (toastEl) {
+          const frame = frameRef.current.getBoundingClientRect();
+          const multBox = multRef.current.getBoundingClientRect();
+          const toastBox = toastEl.getBoundingClientRect();
+          const startX = multBox.left - frame.left + multBox.width / 2;
+          const startY = multBox.top - frame.top + multBox.height / 2;
+          const endX = toastBox.left - frame.left + toastBox.width / 2;
+          const endY = toastBox.top - frame.top + toastBox.height / 2;
+          setMultLaunching(true);
+          setFly({
+            kind: "mult",
+            label: `${mult}×`,
+            x: startX,
+            y: startY,
+            tx: endX,
+            ty: endY,
+            active: false,
+          });
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          if (cancelled) return;
+          setFly({
+            kind: "mult",
+            label: `${mult}×`,
+            x: startX,
+            y: startY,
+            tx: endX,
+            ty: endY,
+            active: true,
+          });
+          await sleep(MULT_FLY_MS);
+          if (cancelled) return;
+          setFly(null);
+          setMultLaunching(false);
+          setToastText(`+${base * mult} дн.`);
+          setToastPop(true);
+          await sleep(480);
+          if (cancelled) return;
+          setToastPop(false);
+        }
+      }
+
+      await sleep(TOAST_HOLD_MS);
+      if (cancelled) return;
+      setToastPhase("out");
+      await sleep(320);
+      if (cancelled) return;
+      setToastPhase("off");
+      setToastText("");
+      setToastPop(false);
+      revealBusy.current = false;
+      onWinRevealDone?.();
+    })();
+
+    return () => {
+      cancelled = true;
+      revealBusy.current = false;
+      setMultLaunching(false);
+    };
+  }, [winReveal, winRevealKey, onWinRevealDone]);
 
   // Idle
   useEffect(() => {
@@ -331,10 +436,26 @@ export function SlotMachine({
           const startY = winBox.top - frame.top + c.y;
           const endX = multBox.left - frame.left + multBox.width / 2;
           const endY = multBox.top - frame.top + multBox.height / 2;
-          setFly({ x: startX, y: startY, tx: endX, ty: endY, active: false });
+          setFly({
+            kind: "x",
+            label: MULT_SYMBOL,
+            x: startX,
+            y: startY,
+            tx: endX,
+            ty: endY,
+            active: false,
+          });
           await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
           if (cancelled) return;
-          setFly({ x: startX, y: startY, tx: endX, ty: endY, active: true });
+          setFly({
+            kind: "x",
+            label: MULT_SYMBOL,
+            x: startX,
+            y: startY,
+            tx: endX,
+            ty: endY,
+            active: true,
+          });
           await new Promise((r) => setTimeout(r, 620));
           if (cancelled) return;
           setLocalMult((m) => m + 1);
@@ -424,7 +545,7 @@ export function SlotMachine({
     <div className="slot-wrap">
       {inBonus ? (
         <div className="slot-bonus-bar">
-          <span className="slot-mult" ref={multRef}>
+          <span className={`slot-mult ${multLaunching ? "is-launching" : ""}`} ref={multRef}>
             {localMult}×
           </span>
           <span className="slot-bonus-left">
@@ -487,14 +608,17 @@ export function SlotMachine({
         <div className="slot-fade bot" />
 
         {toastPhase !== "off" && toastText ? (
-          <div className={`slot-toast phase-${toastPhase}`}>
+          <div
+            ref={toastRef}
+            className={`slot-toast phase-${toastPhase} ${toastPop ? "is-pop" : ""}`}
+          >
             <span>{toastText}</span>
           </div>
         ) : null}
 
         {fly ? (
           <div
-            className={`slot-fly-x ${fly.active ? "is-flying" : ""}`}
+            className={`slot-fly-x ${fly.kind === "mult" ? "is-mult" : ""} ${fly.active ? "is-flying" : ""}`}
             style={
               {
                 "--sx": `${fly.x}px`,
@@ -504,7 +628,7 @@ export function SlotMachine({
               } as CSSProperties
             }
           >
-            {MULT_SYMBOL}
+            {fly.label}
           </div>
         ) : null}
       </div>
@@ -559,7 +683,11 @@ export function SlotMachine({
           letter-spacing: 0.02em;
           display: inline-flex;
           min-width: 2.4rem;
-          transition: transform 0.25s ease, color 0.25s ease;
+          transition: transform 0.25s ease, color 0.25s ease, opacity 0.2s ease;
+        }
+        .slot-mult.is-launching {
+          opacity: 0.25;
+          transform: scale(0.92);
         }
         .slot-mult-anchor {
           position: absolute;
@@ -580,7 +708,7 @@ export function SlotMachine({
             #0a1624;
           border: 1px solid rgba(196, 163, 90, 0.35);
           box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
-          overflow: hidden;
+          overflow: visible;
         }
         .slot-frame.is-bonus {
           border-color: rgba(31, 169, 122, 0.55);
@@ -681,6 +809,9 @@ export function SlotMachine({
         .slot-toast.phase-out {
           animation: toastOut 0.32s ease-in forwards;
         }
+        .slot-toast.is-pop {
+          animation: toastPop 0.45s cubic-bezier(0.2, 1.2, 0.3, 1);
+        }
         .slot-fly-x {
           position: absolute;
           left: 0;
@@ -692,8 +823,17 @@ export function SlotMachine({
           transform: translate(calc(var(--sx) - 0.5em), calc(var(--sy) - 0.5em)) scale(1);
           filter: drop-shadow(0 0 10px rgba(196, 163, 90, 0.8));
         }
+        .slot-fly-x.is-mult {
+          font-family: var(--font-display);
+          font-weight: 800;
+          color: #c4a35a;
+          font-size: 1.7rem;
+        }
         .slot-fly-x.is-flying {
-          animation: flyX 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+          animation: flyX 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        .slot-fly-x.is-mult.is-flying {
+          animation: flyMult 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
         .slot-spin-btn {
           margin-top: 2px;
@@ -738,6 +878,17 @@ export function SlotMachine({
             transform: translate(-50%, -58%) scale(0.9);
           }
         }
+        @keyframes toastPop {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+          }
+          40% {
+            transform: translate(-50%, -50%) scale(1.18);
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
         @keyframes flyX {
           0% {
             transform: translate(calc(var(--sx) - 0.5em), calc(var(--sy) - 0.5em)) scale(1);
@@ -749,6 +900,20 @@ export function SlotMachine({
           }
           100% {
             transform: translate(calc(var(--ex) - 0.5em), calc(var(--ey) - 0.5em)) scale(0.4);
+            opacity: 0;
+          }
+        }
+        @keyframes flyMult {
+          0% {
+            transform: translate(calc(var(--sx) - 0.5em), calc(var(--sy) - 0.5em)) scale(1);
+            opacity: 1;
+          }
+          55% {
+            transform: translate(calc(var(--ex) - 0.5em), calc(var(--ey) - 0.5em)) scale(1.45);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(calc(var(--ex) - 0.5em), calc(var(--ey) - 0.5em)) scale(0.55);
             opacity: 0;
           }
         }

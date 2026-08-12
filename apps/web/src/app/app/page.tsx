@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SlotMachine, type BonusRoundView } from "../../components/SlotMachine";
+import { SlotMachine, type BonusRoundView, type WinReveal } from "../../components/SlotMachine";
 import {
   apiGet,
   apiPost,
@@ -110,6 +110,8 @@ export default function MiniAppPage() {
   const [casinoMsg, setCasinoMsg] = useState("");
   const [slotToast, setSlotToast] = useState<string | null>(null);
   const [toastKey, setToastKey] = useState(0);
+  const [winReveal, setWinReveal] = useState<WinReveal | null>(null);
+  const [winRevealKey, setWinRevealKey] = useState(0);
   const [casinoEligible, setCasinoEligible] = useState(false);
   const [casinoHint, setCasinoHint] = useState("");
   const [bonusPending, setBonusPending] = useState(false);
@@ -124,6 +126,7 @@ export default function MiniAppPage() {
   const pendingWinDaysRef = useRef(0);
   const pendingBonusRef = useRef<BonusRoundView[] | null>(null);
   const settleWaiterRef = useRef<(() => void) | null>(null);
+  const winRevealWaiterRef = useRef<(() => void) | null>(null);
   const [winLines, setWinLines] = useState<number[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [inBonus, setInBonus] = useState(false);
@@ -286,6 +289,22 @@ export default function MiniAppPage() {
     setSlotToast(text);
   }
 
+  function showWinReveal(baseDays: number, multiplier: number) {
+    return new Promise<void>((resolve) => {
+      winRevealWaiterRef.current = resolve;
+      setSlotToast(null);
+      setWinRevealKey((k) => k + 1);
+      setWinReveal({ baseDays, multiplier });
+    });
+  }
+
+  function onWinRevealDone() {
+    setWinReveal(null);
+    const done = winRevealWaiterRef.current;
+    winRevealWaiterRef.current = null;
+    done?.();
+  }
+
   async function buyBonus() {
     if (!token || buyingBonus || spinning || inBonus || bonusIntro || bonusPending) return;
     setBuyingBonus(true);
@@ -435,6 +454,7 @@ export default function MiniAppPage() {
       setBonusSpinsLeft(rounds.length - i - 1);
       setWinLines([]);
       setSlotToast(null);
+      setWinReveal(null);
       const settled = waitReelSettle();
       setSpinning(true);
       setResultGrid(null);
@@ -451,14 +471,14 @@ export default function MiniAppPage() {
       accumulated += round.win_days || 0;
       setBonusAccum(accumulated);
 
-      if (round.win_days > 0) {
-        showToast(`+${round.win_days} дн. · ${round.multiplier}×`);
+      if (round.base_win > 0) {
+        await showWinReveal(round.base_win, round.multiplier);
         tg?.HapticFeedback?.impactOccurred("medium");
-      } else if (round.x_hit) {
-        showToast(`${round.multiplier}×`);
+      } else {
+        // No line win — short beat (X already flew into mult during settle)
+        await new Promise((r) => setTimeout(r, round.x_hit ? 700 : 450));
         tg?.HapticFeedback?.impactOccurred("light");
       }
-      await new Promise((r) => setTimeout(r, 3000));
     }
 
     setBonusSpinsLeft(null);
@@ -476,7 +496,7 @@ export default function MiniAppPage() {
     setMultiplier(1);
     setBonusSpinsLeft(null);
     setBonusAccum(0);
-    if (total > 0) showToast(`Бонус: +${total} дн.`);
+    if (total > 0) showToast(`+${total} дн.`);
     pendingWinDaysRef.current = 0;
   }
 
@@ -623,6 +643,9 @@ export default function MiniAppPage() {
               toast={slotToast}
               toastKey={toastKey}
               onToastDone={() => setSlotToast(null)}
+              winReveal={winReveal}
+              winRevealKey={winRevealKey}
+              onWinRevealDone={onWinRevealDone}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}
               inBonus={inBonus}

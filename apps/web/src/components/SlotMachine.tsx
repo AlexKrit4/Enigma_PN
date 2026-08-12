@@ -13,10 +13,10 @@ const PAYLINES = [
 
 const CELL = 78;
 const VISIBLE = 3;
-/** Random symbols before land per column (short spin). */
-const SPIN_PAD = [7, 11, 15];
-/** Staggered stop: column 1 → 2 → 3 from land start. */
-const STOP_MS = [520, 780, 1040];
+/** Random symbols between result (top) and current symbols (bottom). */
+const SPIN_PAD = [8, 12, 16];
+/** Staggered stop: column 1 → 2 → 3 (soft ease-out, not long). */
+const STOP_MS = [480, 720, 960];
 
 type Props = {
   grid: string[];
@@ -41,14 +41,18 @@ function colOf(grid: string[], col: number): [string, string, string] {
   return [grid[col] || "❓", grid[3 + col] || "❓", grid[6 + col] || "❓"];
 }
 
-function buildStrip(
+/**
+ * Strip for downward spin: result at top, current symbols at bottom.
+ * Offset maxY → 0 with translateY(-offset) makes symbols fall down onto the result.
+ */
+function buildStripDown(
   lead: [string, string, string],
   finals: [string, string, string] | null,
   pad: number
 ): string[] {
   const mid = Array.from({ length: pad }, () => randSym());
-  if (!finals) return [...lead, ...mid];
-  return [...lead, ...mid, ...finals];
+  if (!finals) return [...mid, ...lead];
+  return [...finals, ...mid, ...lead];
 }
 
 function visibleTriple(strip: string[], offset: number): [string, string, string] {
@@ -63,8 +67,9 @@ function visibleTriple(strip: string[], offset: number): [string, string, string
   ];
 }
 
-function easeInOut(t: number) {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+/** Soft decelerate: fast start, gentle stop (no slam). */
+function easeOutSoft(t: number) {
+  return 1 - Math.pow(1 - t, 1.55);
 }
 
 export function SlotMachine({
@@ -121,7 +126,7 @@ export function SlotMachine({
     setLanded([true, true, true]);
   }, [grid, spinning]);
 
-  // Spin: drift randoms → when book arrives, continue motion and stop col 1→2→3 on book
+  // Spin downward: old symbols fall down → randoms → land col 1→2→3 on book (top)
   useEffect(() => {
     if (!spinning) return;
 
@@ -133,34 +138,41 @@ export function SlotMachine({
 
     const maxY = (s: string[]) => Math.max(0, (s.length - VISIBLE) * CELL);
 
-    // --- Phase A: waiting for book — old symbols leave down, random scroll ---
+    // --- Phase A: waiting for book — symbols fall down through randoms ---
     if (!resultGrid || resultGrid.length !== 9) {
       const lead: [string, string, string][] = [
         colOf(gridRef.current, 0),
         colOf(gridRef.current, 1),
         colOf(gridRef.current, 2),
       ];
+      // lead at bottom; start at maxY so current symbols are visible, then scroll up the strip (= fall down)
       const pending = [
-        buildStrip(lead[0], null, 36),
-        buildStrip(lead[1], null, 40),
-        buildStrip(lead[2], null, 44),
+        buildStripDown(lead[0], null, 36),
+        buildStripDown(lead[1], null, 40),
+        buildStripDown(lead[2], null, 44),
+      ];
+      const start: [number, number, number] = [
+        maxY(pending[0]),
+        maxY(pending[1]),
+        maxY(pending[2]),
       ];
       setStrips(pending);
       stripsRef.current = pending;
-      setOffsets([0, 0, 0]);
-      offsetsRef.current = [0, 0, 0];
+      setOffsets(start);
+      offsetsRef.current = start;
 
       const t0 = performance.now();
-      const speeds = [5.2, 5.8, 6.4]; // cells/sec after ease-in
+      const speeds = [5.4, 6.0, 6.6]; // cells/sec after ease-in
 
       const drift = (now: number) => {
         if (cancelled) return;
         const elapsed = (now - t0) / 1000;
-        const easeIn = Math.min(1, elapsed / 0.16);
+        const easeIn = Math.min(1, elapsed / 0.14);
         const accel = easeIn * easeIn;
         const next = [0, 1, 2].map((i) => {
-          const y = elapsed * speeds[i] * accel * CELL;
-          return Math.min(y, maxY(pending[i]) - CELL * 2);
+          const traveled = elapsed * speeds[i] * accel * CELL;
+          // leave headroom so we don't hit the top before the book arrives
+          return Math.max(start[i] - traveled, CELL * 2);
         });
         offsetsRef.current = next;
         setOffsets(next);
@@ -174,7 +186,7 @@ export function SlotMachine({
       };
     }
 
-    // --- Phase B: book is here — rebuild strip ending on book, no visual jump ---
+    // --- Phase B: book here — strip = result (top) + pad + current (bottom); fall onto result ---
     const book = resultGrid;
     const curOff = offsetsRef.current;
     const curStrips = stripsRef.current;
@@ -186,20 +198,20 @@ export function SlotMachine({
       return colOf(gridRef.current, col);
     });
 
-    const phase = [0, 1, 2].map((i) => (curOff[i] || 0) % CELL);
     const finalStrips = [0, 1, 2].map((col) =>
-      buildStrip(leads[col], colOf(book, col), SPIN_PAD[col])
+      buildStripDown(leads[col], colOf(book, col), SPIN_PAD[col])
     );
 
     setStrips(finalStrips);
     stripsRef.current = finalStrips;
-    // Keep fractional cell phase so the strip swap doesn't hitch
-    const from: [number, number, number] = [phase[0], phase[1], phase[2]];
-    const to: [number, number, number] = [
+
+    // Start showing current symbols at bottom; animate offset → 0 (result at top)
+    const from: [number, number, number] = [
       maxY(finalStrips[0]),
       maxY(finalStrips[1]),
       maxY(finalStrips[2]),
     ];
+    const to: [number, number, number] = [0, 0, 0];
     setOffsets(from);
     offsetsRef.current = from;
 
@@ -213,7 +225,7 @@ export function SlotMachine({
 
       for (let i = 0; i < 3; i++) {
         const t = Math.min(1, Math.max(0, (now - landStart) / STOP_MS[i]));
-        next[i] = from[i] + (to[i] - from[i]) * easeInOut(t);
+        next[i] = from[i] + (to[i] - from[i]) * easeOutSoft(t);
         if (t >= 1) {
           next[i] = to[i];
           if (!colDone[i]) {
@@ -240,7 +252,6 @@ export function SlotMachine({
       if (!settledOnce.current) {
         settledOnce.current = true;
         setShowWin(true);
-        // Parent applies grid = book and clears spinning; idle view = same symbols
         onSettled();
       }
     };
@@ -269,10 +280,9 @@ export function SlotMachine({
                 }}
               >
                 {(strips[col] || []).map((sym, idx) => {
-                  const finalStart = (strips[col]?.length || 0) - VISIBLE;
-                  const isFinal = landed[col] && idx >= finalStart;
-                  const row = idx - finalStart;
-                  const gridIdx = isFinal ? row * 3 + col : -1;
+                  // Result sits at the top of the downward strip
+                  const isFinal = landed[col] && idx < VISIBLE;
+                  const gridIdx = isFinal ? idx * 3 + col : -1;
                   const win = gridIdx >= 0 && highlight.has(gridIdx);
                   return (
                     <div key={`${col}-${idx}-${sym}`} className={`reel-cell ${win ? "win" : ""}`}>

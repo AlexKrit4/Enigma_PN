@@ -120,10 +120,20 @@ class MarzbanClient:
             )
             resp.raise_for_status()
 
-    async def get_subscription_links(self, username: str) -> list[str]:
+    async def get_user(self, username: str) -> dict[str, Any] | None:
         if self.settings.marzban_mock:
             entry = self._mock_store.get(username)
-            return list(entry.get("links", [])) if entry else []
+            if not entry:
+                return None
+            return {
+                "username": username,
+                "status": entry.get("status", "active"),
+                "expire": entry.get("expire"),
+                "data_limit": entry.get("data_limit", 0),
+                "used_traffic": entry.get("used_traffic", 0),
+                "online_at": entry.get("online_at"),
+                "links": list(entry.get("links", [])),
+            }
 
         token = await self._login()
         async with httpx.AsyncClient(timeout=30) as client:
@@ -131,8 +141,16 @@ class MarzbanClient:
                 f"{self.settings.marzban_url.rstrip('/')}/api/user/{username}",
                 headers={"Authorization": f"Bearer {token}"},
             )
+            if resp.status_code == 404:
+                return None
             resp.raise_for_status()
-            return list(resp.json().get("links") or [])
+            return resp.json()
+
+    async def get_subscription_links(self, username: str) -> list[str]:
+        data = await self.get_user(username)
+        if not data:
+            return []
+        return list(data.get("links") or [])
 
     async def health(self) -> bool:
         if self.settings.marzban_mock:
@@ -143,6 +161,22 @@ class MarzbanClient:
                 return resp.status_code < 500
         except Exception:
             return False
+
+    async def system_info(self) -> dict[str, Any] | None:
+        if self.settings.marzban_mock:
+            return {"version": "mock", "users_active": 0}
+        try:
+            token = await self._login()
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{self.settings.marzban_url.rstrip('/')}/api/system",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if resp.status_code >= 400:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
 
     def _mock_create(
         self,

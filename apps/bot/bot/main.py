@@ -6,9 +6,11 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import get_settings
-from bot.handlers.start import router
+from bot.handlers import admin as admin_handlers
+from bot.handlers import start as start_handlers
 
 
 async def main() -> None:
@@ -21,8 +23,10 @@ async def main() -> None:
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dp = Dispatcher()
-    dp.include_router(router)
+    dp = Dispatcher(storage=MemoryStorage())
+    # Admin router first so FSM states win over support forward.
+    dp.include_router(admin_handlers.router)
+    dp.include_router(start_handlers.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     logging.info("Bot starting as @%s", settings.telegram_bot_username)

@@ -5,20 +5,77 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db import SessionLocal
 from app.models.entities import Plan, VpnNode
-from app.config import get_settings
 
+# New catalog. Old slugs are deactivated below.
 PLANS = [
-    # для себя
-    {"slug": "self-1m", "name": "Для себя — 1 месяц", "group_name": "для себя", "duration_days": 30, "traffic_gb": 50, "device_limit": 2, "price_rub": "100.00", "sort_order": 10},
-    {"slug": "self-3m", "name": "Для себя — 3 месяца", "group_name": "для себя", "duration_days": 90, "traffic_gb": 150, "device_limit": 2, "price_rub": "299.00", "sort_order": 20},
-    {"slug": "self-1y", "name": "Для себя — 1 год", "group_name": "для себя", "duration_days": 365, "traffic_gb": 700, "device_limit": 2, "price_rub": "999.00", "sort_order": 30},
-    # семейный
-    {"slug": "family-1m", "name": "Семейный — 1 месяц", "group_name": "семейный", "duration_days": 30, "traffic_gb": 100, "device_limit": 4, "price_rub": "225.00", "sort_order": 40},
-    {"slug": "family-3m", "name": "Семейный — 3 месяца", "group_name": "семейный", "duration_days": 90, "traffic_gb": 300, "device_limit": 4, "price_rub": "649.00", "sort_order": 50},
-    {"slug": "family-1y", "name": "Семейный — 1 год", "group_name": "семейный", "duration_days": 365, "traffic_gb": 1300, "device_limit": 4, "price_rub": "2249.00", "sort_order": 60},
+    # Ограниченный трафик — 1 месяц, 3 устройства, отключается по трафику или сроку
+    {
+        "slug": "limited-30gb",
+        "name": "30 ГБ — 1 месяц",
+        "group_name": "ограниченный",
+        "duration_days": 30,
+        "traffic_gb": 30,
+        "device_limit": 3,
+        "price_rub": "100.00",
+        "sort_order": 10,
+    },
+    {
+        "slug": "limited-100gb",
+        "name": "100 ГБ — 1 месяц",
+        "group_name": "ограниченный",
+        "duration_days": 30,
+        "traffic_gb": 100,
+        "device_limit": 3,
+        "price_rub": "300.00",
+        "sort_order": 20,
+    },
+    {
+        "slug": "limited-250gb",
+        "name": "250 ГБ — 1 месяц",
+        "group_name": "ограниченный",
+        "duration_days": 30,
+        "traffic_gb": 250,
+        "device_limit": 3,
+        "price_rub": "600.00",
+        "sort_order": 30,
+    },
+    # Вечный трафик — лимит только по времени, 3 устройства
+    {
+        "slug": "eternal-1m",
+        "name": "Вечный трафик — 1 месяц",
+        "group_name": "вечный",
+        "duration_days": 30,
+        "traffic_gb": None,
+        "device_limit": 3,
+        "price_rub": "200.00",
+        "sort_order": 40,
+    },
+    {
+        "slug": "eternal-3m",
+        "name": "Вечный трафик — 3 месяца",
+        "group_name": "вечный",
+        "duration_days": 90,
+        "traffic_gb": None,
+        "device_limit": 3,
+        "price_rub": "500.00",
+        "sort_order": 50,
+    },
+    {
+        "slug": "eternal-6m",
+        "name": "Вечный трафик — 6 месяцев",
+        "group_name": "вечный",
+        "duration_days": 180,
+        "traffic_gb": None,
+        "device_limit": 3,
+        "price_rub": "800.00",
+        "sort_order": 60,
+    },
 ]
+
+ACTIVE_SLUGS = {p["slug"] for p in PLANS}
 
 
 async def seed() -> None:
@@ -49,6 +106,11 @@ async def seed() -> None:
                     )
                 )
 
+        # Remove old sales catalog from the shop.
+        old = await db.execute(select(Plan).where(Plan.slug.not_in(ACTIVE_SLUGS)))
+        for plan in old.scalars().all():
+            plan.is_active = False
+
         for node_cfg in settings.vpn_nodes:
             node_id = str(node_cfg["id"])
             node = await db.get(VpnNode, node_id)
@@ -67,7 +129,7 @@ async def seed() -> None:
                 node.is_enabled = True
 
         await db.commit()
-        print("Seed OK: plans + vpn_nodes")
+        print("Seed OK: new tariff catalog + vpn_nodes")
 
 
 if __name__ == "__main__":

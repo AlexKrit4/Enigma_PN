@@ -8,7 +8,12 @@ from app.db import get_db
 from app.deps import create_access_token, get_current_user, get_or_create_telegram_user, require_bot
 from app.models.entities import User
 from app.schemas import TelegramAuthIn, TrialCreateIn, UserOut
-from app.services.provisioning import create_trial, get_active_subscription, serialize_subscription
+from app.services.provisioning import (
+    create_trial,
+    get_active_subscription,
+    serialize_subscription_with_devices,
+)
+from app.services.proxy import get_proxy_access, serialize_proxy_access
 
 router = APIRouter(prefix="/api/v1", tags=["auth"])
 
@@ -24,6 +29,8 @@ async def auth_telegram(
     await db.commit()
     token = create_access_token(user.id, settings)
     sub = await get_active_subscription(db, user.id)
+    sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    proxy = serialize_proxy_access(await get_proxy_access(db, user.id), settings)
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -34,7 +41,8 @@ async def auth_telegram(
             email=user.email,
             is_admin=user.is_admin,
             created_at=user.created_at,
-            subscription=serialize_subscription(sub, settings),  # type: ignore[arg-type]
+            subscription=sub_data,  # type: ignore[arg-type]
+            proxy=proxy,  # type: ignore[arg-type]
         ),
     }
 
@@ -46,6 +54,8 @@ async def me(
     settings: Settings = Depends(get_settings),
 ) -> UserOut:
     sub = await get_active_subscription(db, user.id)
+    sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    proxy = serialize_proxy_access(await get_proxy_access(db, user.id), settings)
     return UserOut(
         id=user.id,
         telegram_id=user.telegram_id,
@@ -53,7 +63,8 @@ async def me(
         email=user.email,
         is_admin=user.is_admin,
         created_at=user.created_at,
-        subscription=serialize_subscription(sub, settings),  # type: ignore[arg-type]
+        subscription=sub_data,  # type: ignore[arg-type]
+        proxy=proxy,  # type: ignore[arg-type]
     )
 
 
@@ -71,5 +82,5 @@ async def start_trial(
         raise HTTPException(status_code=400, detail="Trial unavailable (already used or disabled)")
     return {
         "ok": True,
-        "subscription": serialize_subscription(sub, settings),
+        "subscription": await serialize_subscription_with_devices(db, sub, settings, include_devices=True),
     }

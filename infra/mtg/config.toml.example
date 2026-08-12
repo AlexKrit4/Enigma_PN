@@ -1,0 +1,3 @@
+# Example mtg config (Fake-TLS). Generated secret goes into Enigma .env as MTPROTO_SECRET.
+secret = "REPLACE_WITH_generate-secret_OUTPUT"
+bind-to = "0.0.0.0:3128"

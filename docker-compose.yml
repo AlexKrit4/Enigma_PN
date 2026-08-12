@@ -41,6 +41,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: >
       sh -c "alembic upgrade head &&
              python -m app.seed &&
@@ -60,6 +61,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     command: arq app.workers.settings.WorkerSettings
 
   bot:
@@ -102,6 +104,18 @@ services:
     depends_on:
       - api
       - web
+
+  # Optional local mtg (prod uses host docker + HAProxy SNI on :443).
+  # Start: docker compose --profile mtg up -d mtg
+  mtg:
+    profiles: ["mtg"]
+    image: nineseconds/mtg:2
+    restart: unless-stopped
+    command: ["run", "/config/config.toml"]
+    volumes:
+      - ./infra/mtg/config.toml:/config/config.toml:ro
+    ports:
+      - "127.0.0.1:3128:3128"
 
 volumes:
   postgres_data:

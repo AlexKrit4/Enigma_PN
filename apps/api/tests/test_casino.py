@@ -57,7 +57,8 @@ def test_jackpot_full_crown_board() -> None:
     assert book.win_days == 365
     assert all(c == "👑" for c in book.grid)
     assert set(book.winning_lines) == set(range(len(PAYLINES)))
-    assert LINE_PAY["👑"] == 75
+    assert LINE_PAY["👑"] == 73
+    assert len(PAYLINES) * LINE_PAY["👑"] == JACKPOT_WIN_DAYS == 365
     assert MAX_WIN_DAYS == JACKPOT_WIN_DAYS == 365
 
 

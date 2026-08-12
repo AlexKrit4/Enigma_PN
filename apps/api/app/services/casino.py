@@ -39,12 +39,12 @@ LINE_PAY: dict[str, int] = {
     "⭐": 5,
     "💎": 10,
     "7️⃣": 15,
-    "👑": 75,
+    "👑": 73,  # 5 lines × 73 = 365 jackpot
 }
 
 BET_DAYS = 1
 MIN_DAYS_TO_PLAY = 2
-JACKPOT_WIN_DAYS = 365  # 1 book: full board of crowns
+JACKPOT_WIN_DAYS = 365  # full board: 5 × 👑 = 365
 MAX_WIN_DAYS = JACKPOT_WIN_DAYS
 BONUS_ROUNDS = 7
 BONUS_BUY_DAYS = 15  # purchase: next spin is forced bonus book
@@ -55,12 +55,12 @@ BOOK_COUNT = 30_000
 BONUS_BOOK_COUNT = 400  # 1 in 75
 TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle
 # Hit rate 25%: 7_100 regular wins + 400 bonus = 7_500 / 30_000
-BOOK_SEED = 20260812_05
+BOOK_SEED = 20260812_06
 
-# Regular (non-bonus) wins — sum = 24_302 across 7_100 books (rest are zeros)
+# Regular (non-bonus) wins — sum = 24_216 across 7_100 books (rest are zeros)
 WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
-    (365, 1),  # jackpot: full 👑 board
-    (75, 43),  # 3225
+    (365, 1),  # jackpot: full 👑 board = 5 × 73
+    (73, 43),  # 3139
     (15, 204),  # 3060
     (10, 400),  # 4000
     (5, 800),  # 4000
@@ -69,8 +69,9 @@ WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
     (1, 2852),  # 2852
 )
 
-# Bonus books (400): free-spin totals — sum = 4_498
+# Bonus books (400): free-spin totals — sum = 4_584
 BONUS_WIN_COUNTS: tuple[tuple[int, int], ...] = (
+    (88, 1),  # 88
     (50, 10),  # 500
     (30, 20),  # 600
     (20, 40),  # 800
@@ -79,7 +80,7 @@ BONUS_WIN_COUNTS: tuple[tuple[int, int], ...] = (
     (8, 60),  # 480
     (5, 84),  # 420
     (3, 36),  # 108
-    (2, 20),  # 40
+    (2, 19),  # 38
 )
 
 
@@ -221,9 +222,10 @@ def _fill_loss_grid(rng: Random) -> tuple[list[str], list[int]]:
 
 
 def _fill_jackpot_grid() -> tuple[list[str], list[int]]:
-    """Exactly one book: all nine crowns — jackpot credit (not 5× line pay)."""
+    """Exactly one book: all nine crowns — 5 lines × 👑 = JACKPOT_WIN_DAYS."""
     cells = ["👑"] * 9
     winning_lines = list(range(len(PAYLINES)))
+    assert len(PAYLINES) * LINE_PAY["👑"] == JACKPOT_WIN_DAYS
     return cells, winning_lines
 
 

@@ -1,9 +1,9 @@
-# Telegram MTProto Proxy (mtg) — Enigma_PN
+# Telegram MTProto Proxy — Enigma_PN
 
 Прокси **только для Telegram**. Не заменяет VPN в Happ.
 
-Официально: https://core.telegram.org/proxy  
-Рекомендуемый софт: [9seconds/mtg](https://github.com/9seconds/mtg) (Fake-TLS).
+На проде используется **[teleproxy](https://github.com/teleproxy/teleproxy)** на публичном **:443** (Fake-TLS + MSS clamp).  
+HAProxy **не** ставить перед teleproxy — ломает ClientHello / DPI-обход.
 
 ## DNS
 
@@ -11,26 +11,26 @@
 |--------|-----|----------|
 | `tg` | **A** | `31.76.245.81` |
 
-Полное имя: **`tg.bigwinzone.ru`**
+Полное имя: **`tg.bigwinzone.ru`** (A → тот же IP). В ссылке host может быть `tg.bigwinzone.ru`, Fake-TLS domain в secret — `bigwinzone.ru`.
 
-Публичный порт: **443** (через HAProxy SNI). Сайт и прокси делят один IP.
+## Live layout
 
-## Как устроено на VPS
+| Service | Bind | Notes |
+| --- | --- | --- |
+| `teleproxy` | `0.0.0.0:443` | host network; Fake-TLS + backend сайта |
+| site nginx | `127.0.0.1:8444` | Let's Encrypt |
+| Xray Reality | `:52250` | VPN |
 
-1. `enigma-mtg` слушает только `127.0.0.1:3128`
-2. HAProxy на `:443`:
-   - SNI `www.google.com` → mtg (Fake-TLS из secret)
-   - остальное → nginx сайта (`127.0.0.1:8444`)
-3. Конфиг: `infra/haproxy/haproxy-443-mtg.cfg`
+Teleproxy: `EE_DOMAIN=bigwinzone.ru`, `EE_BACKEND=127.0.0.1:8444` — валидный MTProto → прокси, остальное → сайт.
 
-**Важно:** образ `nineseconds/mtg:2` читает путь `/config/config.toml` — volume нужно монтировать именно туда (не `/config.toml`).
-
-## Установка
+## Запуск на VPS
 
 ```bash
-bash infra/scripts/install-mtg.sh www.google.com
-cp infra/haproxy/haproxy-443-mtg.cfg /etc/haproxy/haproxy.cfg
-haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl reload haproxy
+# HAProxy must be stopped
+systemctl disable --now haproxy
+
+/opt/teleproxy/run.sh
+# secret key в /opt/teleproxy/data/config.toml → MTPROTO_SECRET=ee{key}{hex(bigwinzone.ru)}
 ```
 
 ## .env
@@ -39,22 +39,21 @@ haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl reload haproxy
 MTPROTO_ENABLED=true
 MTPROTO_HOST=tg.bigwinzone.ru
 MTPROTO_PORT=443
-MTPROTO_SECRET=ee........
-MTPROTO_FAKE_TLS_DOMAIN=www.google.com
+MTPROTO_SECRET=ee........62696777696e7a6f6e652e7275
+MTPROTO_FAKE_TLS_DOMAIN=bigwinzone.ru
 ```
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api bot
+cd /opt/enigma_pn && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d api bot
 ```
 
-В боте: **«🔌 Прокси Telegram»** / `/tgproxy` → «Подключить прокси».
+В боте: удалить старый прокси → **«🔌 Прокси Telegram»** → подключить заново.
+
+## Если снова «пинг → недоступен»
+
+Это типичный паттерн **TSPU/DPI** в РФ: рукопожатие проходит, Application Data режется. Полностью сервером не лечится (JA4 клиента Telegram). Обход: VPN в Happ для Telegram, или клиент с обновлённым Fake-TLS.
 
 ## API
 
 - `POST /api/v1/telegram-proxy` (только с `X-Bot-Token`)
-- Без активной подписки / trial → отказ
-
-## Безопасность
-
-- Secret общий на MVP — не публикуйте его вне бота.
-- Оператор прокси видит IP клиентов, но не сообщения Telegram.
+- Нужна активная подписка / trial

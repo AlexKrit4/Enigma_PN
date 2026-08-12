@@ -314,10 +314,10 @@ export default function MiniAppPage() {
             : prev
         );
       }
-      tg?.HapticFeedback?.notificationOccurred("success");
+      tg?.HapticFeedback?.impactOccurred("medium");
     } catch (e) {
       setCasinoMsg(e instanceof Error ? e.message : String(e));
-      tg?.HapticFeedback?.notificationOccurred("error");
+      tg?.HapticFeedback?.impactOccurred("light");
     } finally {
       setBuyingBonus(false);
     }

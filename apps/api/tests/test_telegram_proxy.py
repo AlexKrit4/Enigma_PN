@@ -24,13 +24,13 @@ def test_telegram_proxy_links() -> None:
         Settings(
             mtproto_enabled=True,
             mtproto_host="tg.bigwinzone.ru",
-            mtproto_port=8443,
+            mtproto_port=443,
             mtproto_secret=secret,
         )
     )
     assert links.ready is True
     assert links.tg_url.startswith("tg://proxy?")
     assert "server=tg.bigwinzone.ru" in links.tg_url
-    assert "port=8443" in links.tg_url
+    assert "port=443" in links.tg_url
     assert secret in links.tg_url
     assert links.https_url.startswith("https://t.me/proxy?")

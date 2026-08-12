@@ -13,35 +13,24 @@
 
 Полное имя: **`tg.bigwinzone.ru`**
 
-На текущем VPS порт **443 занят HAProxy** (сайт). MTProto слушает **8443**.
+Публичный порт: **443** (через HAProxy SNI). Сайт и прокси делят один IP.
 
-## Установка mtg на VPS
+## Как устроено на VPS
+
+1. `enigma-mtg` слушает только `127.0.0.1:3128`
+2. HAProxy на `:443`:
+   - SNI `www.google.com` → mtg (Fake-TLS из secret)
+   - остальное → nginx сайта (`127.0.0.1:8444`)
+3. Конфиг: `infra/haproxy/haproxy-443-mtg.cfg`
+
+**Важно:** образ `nineseconds/mtg:2` читает путь `/config/config.toml` — volume нужно монтировать именно туда (не `/config.toml`).
+
+## Установка
 
 ```bash
-bash infra/scripts/install-mtg.sh www.google.com 8443
-# скрипт выведет MTPROTO_SECRET
-```
-
-Или вручную:
-
-```bash
-mkdir -p /opt/mtg
-docker run --rm nineseconds/mtg:2 generate-secret --hex www.google.com
-# → ee... в MTPROTO_SECRET
-
-cat > /opt/mtg/config.toml <<'EOF'
-secret = "ВСТАВЬТЕ_SECRET_СЮДА"
-bind-to = "0.0.0.0:3128"
-EOF
-
-docker run -d \
-  --name enigma-mtg \
-  --restart unless-stopped \
-  -v /opt/mtg/config.toml:/config.toml:ro \
-  -p 8443:3128 \
-  nineseconds/mtg:2
-
-ufw allow 8443/tcp || true
+bash infra/scripts/install-mtg.sh www.google.com
+cp infra/haproxy/haproxy-443-mtg.cfg /etc/haproxy/haproxy.cfg
+haproxy -c -f /etc/haproxy/haproxy.cfg && systemctl reload haproxy
 ```
 
 ## .env
@@ -49,7 +38,7 @@ ufw allow 8443/tcp || true
 ```env
 MTPROTO_ENABLED=true
 MTPROTO_HOST=tg.bigwinzone.ru
-MTPROTO_PORT=8443
+MTPROTO_PORT=443
 MTPROTO_SECRET=ee........
 MTPROTO_FAKE_TLS_DOMAIN=www.google.com
 ```
@@ -58,13 +47,12 @@ MTPROTO_FAKE_TLS_DOMAIN=www.google.com
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api bot
 ```
 
-В боте у подписчика: **«🔌 Прокси Telegram»** / `/tgproxy` → «Подключить прокси».
+В боте: **«🔌 Прокси Telegram»** / `/tgproxy` → «Подключить прокси».
 
 ## API
 
 - `POST /api/v1/telegram-proxy` (только с `X-Bot-Token`)
 - Без активной подписки / trial → отказ
-- Пока secret/host пустые → «настраивается»
 
 ## Безопасность
 

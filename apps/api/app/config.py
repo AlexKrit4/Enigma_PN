@@ -70,10 +70,10 @@ class Settings(BaseSettings):
     socks5_container: str = "socks5"
 
     # Shared MTProto (mtg Fake-TLS) for Telegram — только подписчикам.
-    # DNS: tg.bigwinzone.ru → VPS. На этом VPS :443 занят HAProxy → порт 8443.
+    # DNS: tg.bigwinzone.ru → VPS. Public :443 via HAProxy SNI → mtg.
     mtproto_enabled: bool = False
     mtproto_host: str = "tg.bigwinzone.ru"
-    mtproto_port: int = 8443
+    mtproto_port: int = 443
     mtproto_secret: str = ""  # Fake-TLS secret starting with ee...
     mtproto_fake_tls_domain: str = "www.google.com"
 

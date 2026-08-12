@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SlotMachine } from "../../components/SlotMachine";
+import { SlotMachine, type BonusRoundView } from "../../components/SlotMachine";
 import {
   apiGet,
   apiPost,
@@ -110,14 +110,21 @@ export default function MiniAppPage() {
   const [casinoMsg, setCasinoMsg] = useState("");
   const [casinoEligible, setCasinoEligible] = useState(false);
   const [casinoHint, setCasinoHint] = useState("");
-  const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number }>>([]);
+  const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number; note?: string }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [resultGrid, setResultGrid] = useState<string[] | null>(null);
   const pendingBookRef = useRef<string[] | null>(null);
   const pendingMsgRef = useRef("");
   const pendingWinDaysRef = useRef(0);
+  const pendingBonusRef = useRef<BonusRoundView[] | null>(null);
+  const settleWaiterRef = useRef<(() => void) | null>(null);
   const [winLines, setWinLines] = useState<number[]>([]);
   const [spinning, setSpinning] = useState(false);
+  const [inBonus, setInBonus] = useState(false);
+  const [multiplier, setMultiplier] = useState(1);
+  const [bonusSpinsLeft, setBonusSpinsLeft] = useState<number | null>(null);
+  const [bonusIntro, setBonusIntro] = useState(false);
+  const [bonusEndTotal, setBonusEndTotal] = useState<number | null>(null);
   const [devices, setDevices] = useState<Array<{ id: string; label?: string }>>([]);
   const [customGb, setCustomGb] = useState(30);
   const [customDays, setCustomDays] = useState(30);
@@ -135,7 +142,7 @@ export default function MiniAppPage() {
           eligible: boolean;
           message: string;
           enabled: boolean;
-          paytable?: Array<{ symbol: string; pay: number }>;
+          paytable?: Array<{ symbol: string; pay: number; note?: string }>;
         }>("/api/v1/miniapp/casino/status", jwt);
         setCasinoEligible(Boolean(st.eligible));
         setCasinoHint(st.message);
@@ -262,12 +269,13 @@ export default function MiniAppPage() {
   }
 
   async function spin() {
-    if (!token || spinning) return;
+    if (!token || spinning || inBonus || bonusIntro) return;
     setSpinning(true);
     setResultGrid(null);
     pendingBookRef.current = null;
     pendingMsgRef.current = "";
     pendingWinDaysRef.current = 0;
+    pendingBonusRef.current = null;
     setCasinoMsg("");
     setWinLines([]);
     try {
@@ -278,11 +286,19 @@ export default function MiniAppPage() {
         net_days: number;
         message: string;
         days_left: number;
+        is_bonus?: boolean;
+        bonus_rounds?: BonusRoundView[];
       }>("/api/v1/miniapp/casino/spin", token);
-      // Keep spinning until reels land; show win text only after settle
       pendingBookRef.current = res.grid;
-      pendingMsgRef.current = res.message || "";
       pendingWinDaysRef.current = res.win_days || 0;
+      if (res.is_bonus && res.bonus_rounds?.length) {
+        pendingBonusRef.current = res.bonus_rounds;
+        pendingMsgRef.current = "";
+      } else {
+        pendingBonusRef.current = null;
+        pendingMsgRef.current =
+          res.win_days > 0 ? `Выигрыш: +${res.win_days} дн.` : "Не повезло — день списан.";
+      }
       setResultGrid(res.grid);
       setWinLines(res.winning_lines || []);
       await refreshMe(token);
@@ -291,9 +307,16 @@ export default function MiniAppPage() {
       pendingBookRef.current = null;
       pendingMsgRef.current = "";
       pendingWinDaysRef.current = 0;
+      pendingBonusRef.current = null;
       setResultGrid(null);
       setSpinning(false);
     }
+  }
+
+  function waitReelSettle() {
+    return new Promise<void>((resolve) => {
+      settleWaiterRef.current = resolve;
+    });
   }
 
   function onSpinSettled() {
@@ -301,6 +324,22 @@ export default function MiniAppPage() {
     if (book?.length === 9) {
       setGrid(book);
     }
+
+    const waiter = settleWaiterRef.current;
+    if (waiter) {
+      settleWaiterRef.current = null;
+      waiter();
+      return;
+    }
+
+    if (pendingBonusRef.current?.length) {
+      setResultGrid(null);
+      setSpinning(false);
+      setBonusIntro(true);
+      tg?.HapticFeedback?.impactOccurred("heavy");
+      return;
+    }
+
     setCasinoMsg(pendingMsgRef.current);
     tg?.HapticFeedback?.impactOccurred(pendingWinDaysRef.current > 0 ? "heavy" : "light");
     pendingBookRef.current = null;
@@ -308,6 +347,66 @@ export default function MiniAppPage() {
     pendingWinDaysRef.current = 0;
     setResultGrid(null);
     setSpinning(false);
+  }
+
+  async function startBonusGame() {
+    const rounds = pendingBonusRef.current;
+    const total = pendingWinDaysRef.current;
+    setBonusIntro(false);
+    if (!rounds?.length) {
+      pendingBonusRef.current = null;
+      pendingBookRef.current = null;
+      setCasinoMsg(total > 0 ? `Выигрыш: +${total} дн.` : "");
+      return;
+    }
+
+    setInBonus(true);
+    setMultiplier(1);
+    setCasinoMsg("");
+
+    for (let i = 0; i < rounds.length; i++) {
+      const round = rounds[i];
+      setBonusSpinsLeft(rounds.length - i);
+      setWinLines([]);
+      setCasinoMsg("");
+      const settled = waitReelSettle();
+      setSpinning(true);
+      setResultGrid(null);
+      pendingBookRef.current = round.grid;
+      await new Promise((r) => setTimeout(r, 40));
+      setResultGrid(round.grid);
+      setWinLines(round.winning_lines || []);
+      await settled;
+      setGrid(round.grid);
+      setMultiplier(round.multiplier);
+      setResultGrid(null);
+      setSpinning(false);
+      if (round.win_days > 0) {
+        setCasinoMsg(`+${round.win_days} дн. · ${round.multiplier}×`);
+        tg?.HapticFeedback?.impactOccurred("medium");
+      } else if (round.x_hit) {
+        setCasinoMsg(`Х! Множитель ${round.multiplier}×`);
+        tg?.HapticFeedback?.impactOccurred("light");
+      }
+      await new Promise((r) => setTimeout(r, 450));
+    }
+
+    setBonusSpinsLeft(0);
+    setInBonus(false);
+    pendingBonusRef.current = null;
+    pendingBookRef.current = null;
+    pendingMsgRef.current = "";
+    setBonusEndTotal(total);
+    tg?.HapticFeedback?.impactOccurred(total > 0 ? "heavy" : "light");
+  }
+
+  function closeBonusEnd() {
+    const total = bonusEndTotal ?? 0;
+    setBonusEndTotal(null);
+    setMultiplier(1);
+    setBonusSpinsLeft(null);
+    setCasinoMsg(total > 0 ? `Бонус: +${total} дн.` : "Бонус без выигрыша");
+    pendingWinDaysRef.current = 0;
   }
 
   if (loading) {
@@ -437,7 +536,8 @@ export default function MiniAppPage() {
           <div className="ma-card">
             <h2>Слот 3×3</h2>
             <p className="ma-muted">
-              Ставка 1 день · RTP 96% · макс. выигрыш 30 дней. Только безлимитный трафик.
+              Ставка 1 день · RTP 96% · макс. выигрыш 30 дней. В×3 — бонус 7 спинов. Только
+              безлимитный трафик.
             </p>
             {!casinoEligible ? <p className="ma-alert soft">{casinoHint || "Недоступно"}</p> : null}
             <SlotMachine
@@ -445,15 +545,44 @@ export default function MiniAppPage() {
               resultGrid={resultGrid}
               winningLines={winLines}
               spinning={spinning}
-              disabled={!casinoEligible}
+              disabled={!casinoEligible || inBonus || bonusIntro || bonusEndTotal != null}
               onSpin={spin}
               onSettled={onSpinSettled}
               message={casinoMsg}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}
+              inBonus={inBonus}
+              multiplier={multiplier}
+              bonusSpinsLeft={bonusSpinsLeft}
             />
           </div>
         </section>
+      ) : null}
+
+      {bonusIntro ? (
+        <div className="ma-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="ma-modal">
+            <h3>Bonus! 7 Спинов</h3>
+            <p>Три «В» — бесплатные спины с множителем. «Х» увеличивает множитель.</p>
+            <button type="button" className="ma-btn ma-btn-primary" onClick={startBonusGame}>
+              Продолжить
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {bonusEndTotal != null ? (
+        <div className="ma-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="ma-modal">
+            <h3>Бонус завершён</h3>
+            <p>
+              Суммарно за бонусную игру: <b>+{bonusEndTotal} дн.</b>
+            </p>
+            <button type="button" className="ma-btn ma-btn-primary" onClick={closeBonusEnd}>
+              Ок
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {tab === "help" ? (
@@ -657,6 +786,38 @@ export default function MiniAppPage() {
         .ma-alert.soft {
           background: rgba(196, 163, 90, 0.12);
           border-color: rgba(196, 163, 90, 0.35);
+        }
+        .ma-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 80;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(2, 8, 14, 0.72);
+          backdrop-filter: blur(6px);
+        }
+        .ma-modal {
+          width: min(100%, 360px);
+          border-radius: 20px;
+          padding: 22px 20px;
+          background: linear-gradient(180deg, #122436, #0a1624);
+          border: 1px solid rgba(196, 163, 90, 0.4);
+          box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+          display: grid;
+          gap: 12px;
+          text-align: center;
+        }
+        .ma-modal h3 {
+          margin: 0;
+          font-family: var(--font-display);
+          font-size: 1.45rem;
+          color: #c4a35a;
+        }
+        .ma-modal p {
+          margin: 0;
+          color: rgba(232, 238, 247, 0.78);
+          line-height: 1.4;
         }
         .ma-devices {
           list-style: none;

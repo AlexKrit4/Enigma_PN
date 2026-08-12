@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 from collections import Counter
+from random import Random
 
 from app.services.casino import (
+    BONUS_BOOK_COUNT,
+    BONUS_ROUNDS,
+    BONUS_SYMBOL,
+    BONUS_WIN_COUNTS,
     BOOK_COUNT,
     LINE_PAY,
     MAX_WIN_DAYS,
+    MULT_SYMBOL,
     TARGET_RETURN_DAYS,
     WIN_BOOK_COUNTS,
     books_rtp,
     get_books,
     pick_book,
 )
-from random import Random
 
 
 def test_books_count_and_rtp() -> None:
@@ -20,27 +25,63 @@ def test_books_count_and_rtp() -> None:
     assert len(books) == BOOK_COUNT
     assert sum(b.win_days for b in books) == TARGET_RETURN_DAYS
     assert books_rtp() == 0.96
-    assert max(b.win_days for b in books) == MAX_WIN_DAYS
+    assert sum(1 for b in books if b.is_bonus) == BONUS_BOOK_COUNT
+    assert BOOK_COUNT // BONUS_BOOK_COUNT == 100
 
 
-def test_books_distribution_matches_table() -> None:
-    counts = Counter(b.win_days for b in get_books())
+def test_regular_distribution_matches_table() -> None:
+    regular = [b for b in get_books() if not b.is_bonus]
+    counts = Counter(b.win_days for b in regular)
     for amount, expected in WIN_BOOK_COUNTS:
         assert counts[amount] == expected
-    expected_zeros = BOOK_COUNT - sum(c for _, c in WIN_BOOK_COUNTS)
+    expected_zeros = (BOOK_COUNT - BONUS_BOOK_COUNT) - sum(c for _, c in WIN_BOOK_COUNTS)
     assert counts[0] == expected_zeros
 
 
+def test_bonus_distribution_matches_table() -> None:
+    bonus = [b for b in get_books() if b.is_bonus]
+    assert len(bonus) == BONUS_BOOK_COUNT
+    counts = Counter(b.win_days for b in bonus)
+    for amount, expected in BONUS_WIN_COUNTS:
+        assert counts[amount] == expected
+
+
+def test_bonus_rounds_structure() -> None:
+    for book in (b for b in get_books() if b.is_bonus):
+        assert len(book.bonus_rounds) == BONUS_ROUNDS
+        assert sum(1 for c in book.grid if c == BONUS_SYMBOL) == 3
+        assert MULT_SYMBOL not in book.grid
+        assert sum(r.win_days for r in book.bonus_rounds) == book.win_days
+        mult = 1
+        for r in book.bonus_rounds:
+            assert BONUS_SYMBOL not in r.grid
+            if r.x_hit:
+                assert MULT_SYMBOL in r.grid
+                mult += 1
+            else:
+                assert MULT_SYMBOL not in r.grid
+            assert r.multiplier == mult
+
+
+def test_regular_books_no_trigger_or_mult() -> None:
+    for book in (b for b in get_books() if not b.is_bonus):
+        assert sum(1 for c in book.grid if c == BONUS_SYMBOL) < 3
+        assert MULT_SYMBOL not in book.grid
+        assert book.win_days <= MAX_WIN_DAYS
+
+
 def test_books_grids_consistent() -> None:
-    for book in get_books()[::97]:  # sample
+    for book in get_books()[::211]:
         assert len(book.grid) == 9
+        if book.is_bonus:
+            continue
         if book.win_days == 0:
             assert book.winning_lines == ()
         else:
             assert book.winning_lines
-            line = book.winning_lines[0]
             from app.services.casino import PAYLINES
 
+            line = book.winning_lines[0]
             a, b, c = PAYLINES[line]
             assert book.grid[a] == book.grid[b] == book.grid[c]
             assert LINE_PAY[book.grid[a]] == book.win_days
@@ -51,7 +92,4 @@ def test_pick_book_deterministic_with_seed() -> None:
     b = pick_book(Random(1))
     assert a.index == b.index
     assert a.grid == b.grid
-
-
-def test_max_win_capped() -> None:
-    assert all(b.win_days <= MAX_WIN_DAYS for b in get_books())
+    assert a.is_bonus == b.is_bonus

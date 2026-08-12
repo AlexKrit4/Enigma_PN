@@ -240,7 +240,12 @@ async def casino_spin(
         "days_left": result.days_left,
         "subscription": result.subscription,
         "max_win_days": MAX_WIN_DAYS,
+        "is_bonus": result.is_bonus,
+        "bonus_spins": len(result.bonus_rounds),
+        "bonus_rounds": result.bonus_rounds,
         "message": (
-            f"Выигрыш: +{result.win_days} дн." if result.win_days > 0 else "Не повезло — день списан."
+            "Bonus! 7 спинов"
+            if result.is_bonus
+            else (f"Выигрыш: +{result.win_days} дн." if result.win_days > 0 else "Не повезло — день списан.")
         ),
     }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from functools import lru_cache
 from random import Random
@@ -15,7 +15,10 @@ from app.services.marzban import MarzbanClient, to_unix
 from app.services.provisioning import _now, get_active_subscription, serialize_subscription_with_devices
 
 # --- Slot layout -----------------------------------------------------------------
-SYMBOLS = ("🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑")
+# Regular pay symbols (no bonus / no mult)
+PAY_SYMBOLS = ("🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑")
+BONUS_SYMBOL = "В"  # scatter — 3× triggers free spins
+MULT_SYMBOL = "Х"  # only in bonus rounds — each appearance +1×
 
 PAYLINES: tuple[tuple[int, int, int], ...] = (
     (0, 1, 2),
@@ -25,7 +28,6 @@ PAYLINES: tuple[tuple[int, int, int], ...] = (
     (2, 4, 6),
 )
 
-# Visual paytable: 3-of-a-kind on a line → days returned (bet is always 1 day)
 LINE_PAY: dict[str, int] = {
     "🍒": 1,
     "🍋": 2,
@@ -33,37 +35,71 @@ LINE_PAY: dict[str, int] = {
     "⭐": 5,
     "💎": 10,
     "7️⃣": 15,
-    "👑": 30,  # max win = 1 month
+    "👑": 30,
 }
 
 BET_DAYS = 1
 MIN_DAYS_TO_PLAY = 2
-MAX_WIN_DAYS = 30
-BOOK_COUNT = 10_000
-TARGET_RETURN_DAYS = 9_600  # RTP 96% over full book cycle
-BOOK_SEED = 20260812
+MAX_WIN_DAYS = 30  # max single-line / regular book
+BONUS_ROUNDS = 7
+BOOK_COUNT = 20_000
+BONUS_BOOK_COUNT = 200  # 1 in 100
+TARGET_RETURN_DAYS = 19_200  # RTP 96% over full book cycle
+BOOK_SEED = 20260812_02
 
-# How many books of each win amount (sum of wins * count = 9600, total books = 10000)
+# Regular (non-bonus) book win amounts — sum = 17010 across 19800 books
 WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
-    (30, 20),  # 600
-    (15, 40),  # 600
-    (10, 100),  # 1000
-    (5, 200),  # 1000
-    (3, 400),  # 1200
-    (2, 800),  # 1600
-    (1, 3600),  # 3600
+    (30, 30),  # 900
+    (15, 60),  # 900
+    (10, 150),  # 1500
+    (5, 300),  # 1500
+    (3, 600),  # 1800
+    (2, 1200),  # 2400
+    (1, 8010),  # 8010
 )
-# zeros fill the rest: 10000 - 5160 = 4840
+
+# Bonus books (200): total days credited for trigger + 7 free spins — sum = 2190
+BONUS_WIN_COUNTS: tuple[tuple[int, int], ...] = (
+    (25, 10),  # 250
+    (20, 20),  # 400
+    (15, 30),  # 450
+    (12, 40),  # 480
+    (8, 50),  # 400
+    (5, 30),  # 150
+    (3, 20),  # 60
+)
+
+
+@dataclass(frozen=True)
+class BonusRound:
+    grid: tuple[str, ...]
+    winning_lines: tuple[int, ...]
+    base_win: int
+    x_hit: bool
+    multiplier: int
+    win_days: int
+
+    def as_dict(self) -> dict:
+        return {
+            "grid": list(self.grid),
+            "winning_lines": list(self.winning_lines),
+            "base_win": self.base_win,
+            "x_hit": self.x_hit,
+            "multiplier": self.multiplier,
+            "win_days": self.win_days,
+        }
 
 
 @dataclass(frozen=True)
 class Book:
-    """One pre-rolled spin: symbol pattern + locked payout."""
+    """One pre-rolled book: pattern + locked payout (bonus = 1 spin for RTP)."""
 
     index: int
     win_days: int
     grid: tuple[str, ...]
     winning_lines: tuple[int, ...]
+    is_bonus: bool = False
+    bonus_rounds: tuple[BonusRound, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -78,77 +114,290 @@ class SpinResult:
     book_index: int | None
     days_left: int | None
     subscription: dict | None
+    is_bonus: bool = False
+    bonus_rounds: list[dict] = field(default_factory=list)
+
+
+def _scrub_pay_lines(cells: list[str], rng: Random, protect: set[int] | None = None) -> None:
+    protect = protect or set()
+    for a, b, c in PAYLINES:
+        if cells[a] == cells[b] == cells[c] and cells[a] in LINE_PAY:
+            alt = [s for s in PAY_SYMBOLS if s != cells[a]]
+            for pos in (c, b, a):
+                if pos not in protect:
+                    cells[pos] = rng.choice(alt)
+                    break
+
+
+def _place_scatters(cells: list[str], count: int, rng: Random) -> None:
+    if count <= 0:
+        return
+    positions = list(range(9))
+    rng.shuffle(positions)
+    for pos in positions[:count]:
+        cells[pos] = BONUS_SYMBOL
+
+
+def _count_symbol(grid: list[str] | tuple[str, ...], symbol: str) -> int:
+    return sum(1 for c in grid if c == symbol)
 
 
 def _fill_loss_grid(rng: Random) -> tuple[list[str], list[int]]:
-    cells = [rng.choice(SYMBOLS) for _ in range(9)]
-    for a, b, c in PAYLINES:
-        if cells[a] == cells[b] == cells[c]:
-            alt = [s for s in SYMBOLS if s != cells[a]]
-            cells[c] = rng.choice(alt)
+    cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
+    _scrub_pay_lines(cells, rng)
+    # Sometimes show 1–2 bonus scatters (never 3)
+    scatter_n = rng.choice([0, 0, 0, 0, 1, 1, 2])
+    if scatter_n:
+        _place_scatters(cells, scatter_n, rng)
+        _scrub_pay_lines(cells, rng)
     return cells, []
 
 
 def _fill_win_grid(payout: int, rng: Random) -> tuple[list[str], list[int]]:
-    cells = [rng.choice(SYMBOLS) for _ in range(9)]
+    cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
     symbol = next((s for s, pay in LINE_PAY.items() if pay == payout), None)
     if symbol is None:
-        # Fallback: crown for max-ish
-        symbol = "👑" if payout >= MAX_WIN_DAYS else "🍒"
-        payout_sym = LINE_PAY[symbol]
-        if payout_sym != payout and payout <= MAX_WIN_DAYS:
-            # still show closest visual
-            symbol = min(LINE_PAY.items(), key=lambda kv: abs(kv[1] - payout))[0]
+        symbol = min(LINE_PAY.items(), key=lambda kv: abs(kv[1] - payout))[0]
 
     line_idx = rng.randrange(len(PAYLINES))
     a, b, c = PAYLINES[line_idx]
     cells[a] = cells[b] = cells[c] = symbol
     winning_lines = [line_idx]
+    _scrub_pay_lines(cells, rng, protect={a, b, c})
 
-    for i, (x, y, z) in enumerate(PAYLINES):
-        if i == line_idx:
-            continue
-        if cells[x] == cells[y] == cells[z]:
-            alt = [s for s in SYMBOLS if s != cells[x]]
-            for pos in (z, y, x):
-                if pos not in (a, b, c):
-                    cells[pos] = rng.choice(alt)
-                    break
-            else:
-                cells[z] = rng.choice(alt)
+    # Optional 1–2 scatters off the winning line
+    free = [i for i in range(9) if i not in (a, b, c)]
+    scatter_n = rng.choice([0, 0, 0, 1, 1, 2])
+    if scatter_n and free:
+        rng.shuffle(free)
+        for pos in free[: min(scatter_n, len(free))]:
+            cells[pos] = BONUS_SYMBOL
+        _scrub_pay_lines(cells, rng, protect={a, b, c})
     return cells, winning_lines
 
 
-def _build_books(seed: int = BOOK_SEED) -> tuple[Book, ...]:
-    win_list: list[int] = []
-    for amount, count in WIN_BOOK_COUNTS:
-        win_list.extend([amount] * count)
-    zero_count = BOOK_COUNT - len(win_list)
-    if zero_count < 0:
-        raise RuntimeError("WIN_BOOK_COUNTS exceed BOOK_COUNT")
-    win_list.extend([0] * zero_count)
-    assert len(win_list) == BOOK_COUNT
-    assert sum(win_list) == TARGET_RETURN_DAYS
+def _fill_bonus_trigger(rng: Random) -> tuple[list[str], list[int]]:
+    """Trigger spin: exactly 3× В, no Х, no paying lines."""
+    cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
+    _place_scatters(cells, 3, rng)
+    _scrub_pay_lines(cells, rng)
+    # Ensure still exactly 3 scatters after scrub
+    while _count_symbol(cells, BONUS_SYMBOL) < 3:
+        for i in range(9):
+            if cells[i] != BONUS_SYMBOL:
+                cells[i] = BONUS_SYMBOL
+                break
+    while _count_symbol(cells, BONUS_SYMBOL) > 3:
+        for i in range(9):
+            if cells[i] == BONUS_SYMBOL:
+                cells[i] = rng.choice(PAY_SYMBOLS)
+                break
+        _scrub_pay_lines(cells, rng)
+    assert _count_symbol(cells, BONUS_SYMBOL) == 3
+    assert MULT_SYMBOL not in cells
+    return cells, []
 
-    rng = Random(seed)
-    rng.shuffle(win_list)
 
-    books: list[Book] = []
-    for idx, win in enumerate(win_list):
-        # Per-book RNG derived from master seed + index for stable grids
-        local = Random(seed * 1_000_003 + idx)
-        if win <= 0:
-            grid, lines = _fill_loss_grid(local)
+def _eval_line_win(cells: list[str]) -> tuple[int, list[int]]:
+    """First matching 3-of-a-kind payline (pay symbols only)."""
+    for i, (a, b, c) in enumerate(PAYLINES):
+        if cells[a] == cells[b] == cells[c] and cells[a] in LINE_PAY:
+            return LINE_PAY[cells[a]], [i]
+    return 0, []
+
+
+def _fill_bonus_round_grid(
+    rng: Random,
+    *,
+    want_x: bool,
+    want_base: int,
+) -> tuple[list[str], list[int], int, bool]:
+    """Build one free-spin grid: no В; optional Х; optional line win = want_base."""
+    cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
+    x_hit = False
+    if want_x:
+        pos = rng.randrange(9)
+        cells[pos] = MULT_SYMBOL
+        x_hit = True
+
+    winning_lines: list[int] = []
+    base = 0
+    if want_base > 0:
+        symbol = next((s for s, pay in LINE_PAY.items() if pay == want_base), None)
+        if symbol is None:
+            # pick closest allowed pay and accept — caller should pass valid pays
+            symbol = min(LINE_PAY.items(), key=lambda kv: abs(kv[1] - want_base))[0]
+            want_base = LINE_PAY[symbol]
+        line_idx = rng.randrange(len(PAYLINES))
+        a, b, c = PAYLINES[line_idx]
+        # Don't overwrite Х if it sits on the line — move Х
+        if want_x and any(cells[p] == MULT_SYMBOL for p in (a, b, c)):
+            for i in range(9):
+                if cells[i] == MULT_SYMBOL:
+                    cells[i] = rng.choice(PAY_SYMBOLS)
+            free = [i for i in range(9) if i not in (a, b, c)]
+            cells[rng.choice(free)] = MULT_SYMBOL
+        cells[a] = cells[b] = cells[c] = symbol
+        winning_lines = [line_idx]
+        base = want_base
+        protect = {a, b, c}
+        if want_x:
+            protect |= {i for i, s in enumerate(cells) if s == MULT_SYMBOL}
+        _scrub_pay_lines(cells, rng, protect=protect)
+    else:
+        protect = {i for i, s in enumerate(cells) if s == MULT_SYMBOL}
+        _scrub_pay_lines(cells, rng, protect=protect)
+
+    assert BONUS_SYMBOL not in cells
+    assert (MULT_SYMBOL in cells) == x_hit
+    return cells, winning_lines, base, x_hit
+
+
+def _split_bonus_total(total: int, rounds: int, rng: Random) -> list[int]:
+    """Split total into `rounds` non-negative parts (many zeros OK)."""
+    if total <= 0:
+        return [0] * rounds
+    active = min(rounds, max(1, rng.randint(2, 5)))
+    weights = [rng.random() + 0.2 for _ in range(active)]
+    s = sum(weights)
+    parts = [0] * rounds
+    idxs = list(range(rounds))
+    rng.shuffle(idxs)
+    chosen = idxs[:active]
+    assigned = 0
+    for i, w in zip(chosen[:-1], weights[:-1]):
+        parts[i] = int(total * (w / s))
+        assigned += parts[i]
+    parts[chosen[-1]] = max(0, total - assigned)
+    assert sum(parts) == total
+    return parts
+
+
+def _build_bonus_book_body(total: int, rng: Random) -> tuple[list[str], list[int], tuple[BonusRound, ...]]:
+    """
+    Build trigger (3×В) + 7 free spins whose credited win_days sum to `total`.
+    Multiplier starts at 1; each Х on a round bumps it by +1 before that round's pay.
+    """
+    trigger, trigger_lines = _fill_bonus_trigger(rng)
+
+    # Pre-roll which rounds get Х (affects multiplier path)
+    x_flags: list[bool] = []
+    mult = 1
+    mults_after: list[int] = []
+    for i in range(BONUS_ROUNDS):
+        want_x = rng.random() < (0.2 + 0.05 * i) and mult < 8
+        if want_x:
+            mult += 1
+        x_flags.append(want_x)
+        mults_after.append(mult)
+
+    # Plan credits that are achievable as base*mult for non-last rounds
+    valid_bases = [0, *sorted(LINE_PAY.values())]
+    remaining = total
+    planned: list[int] = [0] * BONUS_ROUNDS
+    for i in range(BONUS_ROUNDS - 1):
+        m = mults_after[i]
+        # Soft target share of remaining
+        share = remaining / (BONUS_ROUNDS - i)
+        if share <= 0 or rng.random() < 0.35:
+            planned[i] = 0
+            continue
+        candidates = [b * m for b in valid_bases if b * m <= remaining]
+        if not candidates:
+            planned[i] = 0
+            continue
+        # Prefer close to share
+        credit = min(candidates, key=lambda c: abs(c - share))
+        if rng.random() < 0.25:
+            credit = rng.choice(candidates)
+        planned[i] = credit
+        remaining -= credit
+    planned[-1] = max(0, remaining)
+
+    rounds: list[BonusRound] = []
+    for i in range(BONUS_ROUNDS):
+        m = mults_after[i]
+        credited = planned[i]
+        if credited <= 0:
+            base = 0
+        elif credited % m == 0 and (credited // m) in LINE_PAY.values():
+            base = credited // m
         else:
-            grid, lines = _fill_win_grid(win, local)
-        books.append(
-            Book(
-                index=idx,
-                win_days=win,
+            # Pick visual base closest to credited/m; lock credited for RTP
+            ideal = max(0, round(credited / m))
+            base = min(valid_bases, key=lambda v: abs(v - ideal))
+
+        grid, lines, base_out, _x = _fill_bonus_round_grid(
+            rng, want_x=x_flags[i], want_base=base if base in LINE_PAY.values() else 0
+        )
+        rounds.append(
+            BonusRound(
                 grid=tuple(grid),
                 winning_lines=tuple(lines),
+                base_win=base_out,
+                x_hit=x_flags[i],
+                multiplier=m,
+                win_days=credited,
             )
         )
+
+    assert sum(r.win_days for r in rounds) == total
+    assert all(r.win_days >= 0 for r in rounds)
+    assert len(rounds) == BONUS_ROUNDS
+    return trigger, trigger_lines, tuple(rounds)
+
+
+def _build_books(seed: int = BOOK_SEED) -> tuple[Book, ...]:
+    regular_wins: list[int] = []
+    for amount, count in WIN_BOOK_COUNTS:
+        regular_wins.extend([amount] * count)
+    regular_slots = BOOK_COUNT - BONUS_BOOK_COUNT
+    zero_count = regular_slots - len(regular_wins)
+    if zero_count < 0:
+        raise RuntimeError("WIN_BOOK_COUNTS exceed regular book slots")
+    regular_wins.extend([0] * zero_count)
+
+    bonus_wins: list[int] = []
+    for amount, count in BONUS_WIN_COUNTS:
+        bonus_wins.extend([amount] * count)
+    if len(bonus_wins) != BONUS_BOOK_COUNT:
+        raise RuntimeError("BONUS_WIN_COUNTS must sum to BONUS_BOOK_COUNT")
+
+    assert len(regular_wins) + len(bonus_wins) == BOOK_COUNT
+    assert sum(regular_wins) + sum(bonus_wins) == TARGET_RETURN_DAYS
+
+    rng = Random(seed)
+    # Build typed list then shuffle
+    specs: list[tuple[str, int]] = [("regular", w) for w in regular_wins] + [
+        ("bonus", w) for w in bonus_wins
+    ]
+    rng.shuffle(specs)
+
+    books: list[Book] = []
+    for idx, (kind, win) in enumerate(specs):
+        local = Random(seed * 1_000_003 + idx)
+        if kind == "bonus":
+            grid, lines, rounds = _build_bonus_book_body(win, local)
+            books.append(
+                Book(
+                    index=idx,
+                    win_days=win,
+                    grid=tuple(grid),
+                    winning_lines=tuple(lines),
+                    is_bonus=True,
+                    bonus_rounds=rounds,
+                )
+            )
+        elif win <= 0:
+            grid, lines = _fill_loss_grid(local)
+            books.append(
+                Book(index=idx, win_days=0, grid=tuple(grid), winning_lines=tuple(lines))
+            )
+        else:
+            grid, lines = _fill_win_grid(win, local)
+            books.append(
+                Book(index=idx, win_days=win, grid=tuple(grid), winning_lines=tuple(lines))
+            )
     return tuple(books)
 
 
@@ -157,7 +406,24 @@ def get_books() -> tuple[Book, ...]:
     books = _build_books()
     assert len(books) == BOOK_COUNT
     assert sum(b.win_days for b in books) == TARGET_RETURN_DAYS
-    assert max(b.win_days for b in books) <= MAX_WIN_DAYS
+    assert sum(1 for b in books if b.is_bonus) == BONUS_BOOK_COUNT
+    assert max((b.win_days for b in books if not b.is_bonus), default=0) <= MAX_WIN_DAYS
+    for b in books:
+        if b.is_bonus:
+            assert len(b.bonus_rounds) == BONUS_ROUNDS
+            assert _count_symbol(b.grid, BONUS_SYMBOL) == 3
+            assert MULT_SYMBOL not in b.grid
+            assert sum(r.win_days for r in b.bonus_rounds) == b.win_days
+            for r in b.bonus_rounds:
+                assert BONUS_SYMBOL not in r.grid
+                assert r.win_days >= 0
+                if r.x_hit:
+                    assert MULT_SYMBOL in r.grid
+                else:
+                    assert MULT_SYMBOL not in r.grid
+        else:
+            assert _count_symbol(b.grid, BONUS_SYMBOL) < 3
+            assert MULT_SYMBOL not in b.grid
     return books
 
 
@@ -166,7 +432,10 @@ def books_rtp() -> float:
 
 
 def paytable_public() -> list[dict]:
-    return [{"symbol": s, "pay": LINE_PAY[s]} for s in SYMBOLS]
+    rows = [{"symbol": s, "pay": LINE_PAY[s]} for s in PAY_SYMBOLS]
+    rows.append({"symbol": BONUS_SYMBOL, "pay": 0, "note": "bonus"})
+    rows.append({"symbol": MULT_SYMBOL, "pay": 0, "note": "mult"})
+    return rows
 
 
 def pick_book(rng: Random | None = None) -> Book:
@@ -244,6 +513,7 @@ async def spin_casino(
     payout = book.win_days
     grid = list(book.grid)
     winning_lines = list(book.winning_lines)
+    bonus_payload = [r.as_dict() for r in book.bonus_rounds] if book.is_bonus else []
 
     now = _now()
     sub.ends_at = sub.ends_at - timedelta(days=BET_DAYS)
@@ -280,4 +550,6 @@ async def spin_casino(
         book_index=book.index,
         days_left=days_left(sub.ends_at),
         subscription=sub_data,
+        is_bonus=book.is_bonus,
+        bonus_rounds=bonus_payload,
     )

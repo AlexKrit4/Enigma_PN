@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const ALL = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑"] as const;
+const PAY_SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑"] as const;
+const BONUS_SYMBOL = "В";
+const MULT_SYMBOL = "Х";
+
 const PAYLINES = [
   [0, 1, 2],
   [3, 4, 5],
@@ -13,44 +16,56 @@ const PAYLINES = [
 
 const CELL = 78;
 const VISIBLE = 3;
+const GAP = 8; // must match .slot-window gap
 /** Random symbols between result (top) and current symbols (bottom). */
 const SPIN_PAD = [8, 12, 16];
-/** Staggered stop: column 1 → 2 → 3 (soft ease-out, not long). */
+/** Staggered stop: column 1 → 2 → 3. */
 const STOP_MS = [480, 720, 960];
+/** Match land average speed: pad_cells / (stop_ms/1000) ≈ 16.67 cells/s */
+const DRIFT_SPEED = SPIN_PAD.map((pad, i) => pad / (STOP_MS[i] / 1000));
+
+export type BonusRoundView = {
+  grid: string[];
+  winning_lines: number[];
+  base_win: number;
+  x_hit: boolean;
+  multiplier: number;
+  win_days: number;
+};
 
 type Props = {
   grid: string[];
-  /** Book from server while spinning — animation must end on these columns. */
   resultGrid: string[] | null;
   winningLines: number[];
   spinning: boolean;
   disabled?: boolean;
   onSpin: () => void;
-  /** Called when all three reels have landed on the book. */
   onSettled: () => void;
   message?: string;
   daysLeft?: number | null;
-  paytable?: Array<{ symbol: string; pay: number }>;
+  paytable?: Array<{ symbol: string; pay: number; note?: string }>;
+  /** Bonus mode UI */
+  inBonus?: boolean;
+  multiplier?: number;
+  bonusSpinsLeft?: number | null;
+  spinLabel?: string;
 };
 
-function randSym() {
-  return ALL[Math.floor(Math.random() * ALL.length)];
+function randFrom(pool: readonly string[]) {
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function colOf(grid: string[], col: number): [string, string, string] {
   return [grid[col] || "❓", grid[3 + col] || "❓", grid[6 + col] || "❓"];
 }
 
-/**
- * Strip for downward spin: result at top, current symbols at bottom.
- * Offset maxY → 0 with translateY(-offset) makes symbols fall down onto the result.
- */
 function buildStripDown(
   lead: [string, string, string],
   finals: [string, string, string] | null,
-  pad: number
+  pad: number,
+  pool: readonly string[]
 ): string[] {
-  const mid = Array.from({ length: pad }, () => randSym());
+  const mid = Array.from({ length: pad }, () => randFrom(pool));
   if (!finals) return [...mid, ...lead];
   return [...finals, ...mid, ...lead];
 }
@@ -67,10 +82,17 @@ function visibleTriple(strip: string[], offset: number): [string, string, string
   ];
 }
 
-/** Smooth cruise: no hard kick at start, soft settle at end. */
 function easeSmooth(t: number) {
-  // smootherstep — zero velocity at both ends
   return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function cellCenter(idx: number, colW: number): { x: number; y: number } {
+  const col = idx % 3;
+  const row = Math.floor(idx / 3);
+  return {
+    x: col * (colW + GAP) + colW / 2,
+    y: row * CELL + CELL / 2,
+  };
 }
 
 export function SlotMachine({
@@ -84,7 +106,16 @@ export function SlotMachine({
   message,
   daysLeft,
   paytable,
+  inBonus,
+  multiplier = 1,
+  bonusSpinsLeft,
+  spinLabel,
 }: Props) {
+  const pool = useMemo(
+    () => (inBonus ? [...PAY_SYMBOLS, MULT_SYMBOL] : [...PAY_SYMBOLS, BONUS_SYMBOL]),
+    [inBonus]
+  );
+
   const [strips, setStrips] = useState<string[][]>(() => [
     ["❓", "❓", "❓"],
     ["❓", "❓", "❓"],
@@ -93,11 +124,13 @@ export function SlotMachine({
   const [offsets, setOffsets] = useState<number[]>([0, 0, 0]);
   const [landed, setLanded] = useState<[boolean, boolean, boolean]>([true, true, true]);
   const [showWin, setShowWin] = useState(false);
+  const [colW, setColW] = useState(CELL);
 
   const stripsRef = useRef(strips);
   const offsetsRef = useRef(offsets);
   const gridRef = useRef(grid);
   const settledOnce = useRef(false);
+  const windowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     stripsRef.current = strips;
@@ -109,16 +142,20 @@ export function SlotMachine({
     gridRef.current = grid;
   }, [grid]);
 
-  const highlight = useMemo(() => {
-    const set = new Set<number>();
-    if (!showWin) return set;
-    for (const li of winningLines) {
-      for (const idx of PAYLINES[li] || []) set.add(idx);
-    }
-    return set;
-  }, [winningLines, showWin]);
+  useEffect(() => {
+    const el = windowRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      setColW(Math.max(40, (w - GAP * 2) / 3));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  // Idle: show settled grid (must match last landed book — no post-swap)
+  // Idle
   useEffect(() => {
     if (spinning) return;
     if (grid.length !== 9) return;
@@ -127,7 +164,7 @@ export function SlotMachine({
     setLanded([true, true, true]);
   }, [grid, spinning]);
 
-  // Spin downward: old symbols fall down → randoms → land col 1→2→3 on book (top)
+  // Spin downward
   useEffect(() => {
     if (!spinning) return;
 
@@ -138,19 +175,18 @@ export function SlotMachine({
     setLanded([false, false, false]);
 
     const maxY = (s: string[]) => Math.max(0, (s.length - VISIBLE) * CELL);
+    const symPool = pool;
 
-    // --- Phase A: waiting for book — symbols fall down through randoms ---
     if (!resultGrid || resultGrid.length !== 9) {
       const lead: [string, string, string][] = [
         colOf(gridRef.current, 0),
         colOf(gridRef.current, 1),
         colOf(gridRef.current, 2),
       ];
-      // lead at bottom; start at maxY so current symbols are visible, then scroll up the strip (= fall down)
       const pending = [
-        buildStripDown(lead[0], null, 36),
-        buildStripDown(lead[1], null, 40),
-        buildStripDown(lead[2], null, 44),
+        buildStripDown(lead[0], null, 36, symPool),
+        buildStripDown(lead[1], null, 40, symPool),
+        buildStripDown(lead[2], null, 44, symPool),
       ];
       const start: [number, number, number] = [
         maxY(pending[0]),
@@ -163,14 +199,11 @@ export function SlotMachine({
       offsetsRef.current = start;
 
       const t0 = performance.now();
-      const speeds = [5.2, 5.8, 6.4]; // cells/sec — constant, no kickstart
-
       const drift = (now: number) => {
         if (cancelled) return;
         const elapsed = (now - t0) / 1000;
         const next = [0, 1, 2].map((i) => {
-          const traveled = elapsed * speeds[i] * CELL;
-          // leave headroom so we don't hit the top before the book arrives
+          const traveled = elapsed * DRIFT_SPEED[i] * CELL;
           return Math.max(start[i] - traveled, CELL * 2);
         });
         offsetsRef.current = next;
@@ -185,7 +218,6 @@ export function SlotMachine({
       };
     }
 
-    // --- Phase B: book here — strip = result (top) + pad + current (bottom); fall onto result ---
     const book = resultGrid;
     const curOff = offsetsRef.current;
     const curStrips = stripsRef.current;
@@ -198,13 +230,12 @@ export function SlotMachine({
     });
 
     const finalStrips = [0, 1, 2].map((col) =>
-      buildStripDown(leads[col], colOf(book, col), SPIN_PAD[col])
+      buildStripDown(leads[col], colOf(book, col), SPIN_PAD[col], symPool)
     );
 
     setStrips(finalStrips);
     stripsRef.current = finalStrips;
 
-    // Start showing current symbols at bottom; animate offset → 0 (result at top)
     const from: [number, number, number] = [
       maxY(finalStrips[0]),
       maxY(finalStrips[1]),
@@ -262,14 +293,35 @@ export function SlotMachine({
       cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, resultGrid]);
+  }, [spinning, resultGrid, pool]);
 
   const busy = spinning || !landed.every(Boolean);
+  const winH = CELL * VISIBLE;
+  const winW = colW * 3 + GAP * 2;
+
+  const linePaths = useMemo(() => {
+    if (!showWin || !winningLines.length) return [];
+    return winningLines.map((li) => {
+      const cells = PAYLINES[li] || [];
+      if (cells.length < 2) return null;
+      const pts = cells.map((idx) => cellCenter(idx, colW));
+      return pts.map((p) => `${p.x},${p.y}`).join(" ");
+    }).filter(Boolean) as string[];
+  }, [showWin, winningLines, colW]);
 
   return (
     <div className="slot-wrap">
-      <div className={`slot-frame ${busy ? "is-spinning" : ""}`}>
-        <div className="slot-window">
+      {inBonus ? (
+        <div className="slot-bonus-bar">
+          <span className="slot-mult">{multiplier}×</span>
+          {bonusSpinsLeft != null ? (
+            <span className="slot-bonus-left">Осталось спинов: {bonusSpinsLeft}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={`slot-frame ${busy ? "is-spinning" : ""} ${inBonus ? "is-bonus" : ""}`}>
+        <div className="slot-window" ref={windowRef}>
           {[0, 1, 2].map((col) => (
             <div key={col} className="reel">
               <div
@@ -278,20 +330,35 @@ export function SlotMachine({
                   transform: `translate3d(0, ${-offsets[col]}px, 0)`,
                 }}
               >
-                {(strips[col] || []).map((sym, idx) => {
-                  // Result sits at the top of the downward strip
-                  const isFinal = landed[col] && idx < VISIBLE;
-                  const gridIdx = isFinal ? idx * 3 + col : -1;
-                  const win = gridIdx >= 0 && highlight.has(gridIdx);
-                  return (
-                    <div key={`${col}-${idx}-${sym}`} className={`reel-cell ${win ? "win" : ""}`}>
-                      <span>{sym}</span>
-                    </div>
-                  );
-                })}
+                {(strips[col] || []).map((sym, idx) => (
+                  <div key={`${col}-${idx}-${sym}`} className="reel-cell">
+                    <span>{sym}</span>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
+
+          {linePaths.length ? (
+            <svg
+              className="slot-lines"
+              width={winW}
+              height={winH}
+              viewBox={`0 0 ${winW} ${winH}`}
+            >
+              {linePaths.map((pts, i) => (
+                <polyline
+                  key={i}
+                  points={pts}
+                  fill="none"
+                  stroke="rgba(196, 163, 90, 0.95)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </svg>
+          ) : null}
         </div>
         <div className="slot-fade top" />
         <div className="slot-fade bot" />
@@ -300,13 +367,15 @@ export function SlotMachine({
       <button
         type="button"
         className="ma-btn ma-btn-primary slot-spin-btn"
-        disabled={disabled || busy}
+        disabled={disabled || busy || inBonus}
         onClick={onSpin}
       >
-        {busy ? "Крутим…" : "Крутить (−1 день)"}
+        {busy
+          ? "Крутим…"
+          : spinLabel || (inBonus ? "Бонус…" : "Крутить (−1 день)")}
       </button>
 
-      {message && showWin ? <p className="ma-casino-msg">{message}</p> : null}
+      {!busy && message ? <p className="ma-casino-msg">{message}</p> : null}
       <p className="ma-muted tiny">
         RTP 96% · макс. выигрыш 30 дней · осталось: <b>{daysLeft ?? "—"}</b>
       </p>
@@ -315,7 +384,11 @@ export function SlotMachine({
         <div className="slot-paytable">
           {paytable.map((p) => (
             <span key={p.symbol}>
-              {p.symbol}×3 → {p.pay}д
+              {p.note === "bonus"
+                ? `${p.symbol}×3 → бонус`
+                : p.note === "mult"
+                  ? `${p.symbol} → +1×`
+                  : `${p.symbol}×3 → ${p.pay}д`}
             </span>
           ))}
         </div>
@@ -326,6 +399,23 @@ export function SlotMachine({
           display: flex;
           flex-direction: column;
           gap: 12px;
+        }
+        .slot-bonus-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .slot-mult {
+          font-family: var(--font-display);
+          font-size: 1.6rem;
+          font-weight: 800;
+          color: #c4a35a;
+          letter-spacing: 0.02em;
+        }
+        .slot-bonus-left {
+          font-size: 0.9rem;
+          color: rgba(232, 238, 247, 0.7);
         }
         .slot-frame {
           position: relative;
@@ -338,6 +428,9 @@ export function SlotMachine({
           box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
           overflow: hidden;
         }
+        .slot-frame.is-bonus {
+          border-color: rgba(31, 169, 122, 0.55);
+        }
         .slot-frame.is-spinning {
           box-shadow:
             0 16px 36px rgba(0, 0, 0, 0.35),
@@ -346,10 +439,17 @@ export function SlotMachine({
         .slot-window {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
+          gap: ${GAP}px;
           height: ${CELL * VISIBLE}px;
           position: relative;
           z-index: 1;
+        }
+        .slot-lines {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 3;
+          overflow: visible;
         }
         .reel {
           position: relative;
@@ -368,12 +468,6 @@ export function SlotMachine({
           place-items: center;
           font-size: 2rem;
           line-height: 1;
-        }
-        .reel-cell.win {
-          animation: winpulse 0.65s ease-in-out 2;
-        }
-        .reel-cell.win span {
-          filter: drop-shadow(0 0 8px rgba(196, 163, 90, 0.75));
         }
         .slot-fade {
           pointer-events: none;
@@ -402,15 +496,6 @@ export function SlotMachine({
           gap: 8px 12px;
           font-size: 0.78rem;
           color: rgba(232, 238, 247, 0.55);
-        }
-        @keyframes winpulse {
-          0%,
-          100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.08);
-          }
         }
       `}</style>
     </div>

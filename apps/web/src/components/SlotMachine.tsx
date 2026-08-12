@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 const PAY_SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑"] as const;
 const BONUS_SYMBOL = "В";
@@ -16,15 +16,14 @@ const PAYLINES = [
 
 const CELL = 78;
 const VISIBLE = 3;
-const GAP = 8; // must match .slot-window gap
+const GAP = 8;
 /** Constant spin speed (cells/sec) — no accel / no ease. */
 const SPIN_SPEED = 16;
-/**
- * Different travel distance → reels stop 1→2→3 at the SAME linear speed.
- * stop_ms = pad / SPIN_SPEED * 1000
- */
 const SPIN_PAD = [10, 14, 18];
 const SPEED_PX = SPIN_SPEED * CELL;
+/** Extra travel on reel 3 when reels 1–2 already show «В». */
+const ANTICIPATION_SEC = 4;
+const TOAST_HOLD_MS = 2200;
 
 export type BonusRoundView = {
   grid: string[];
@@ -43,14 +42,16 @@ type Props = {
   disabled?: boolean;
   onSpin: () => void;
   onSettled: () => void;
+  /** Error / status under the slot (not win/loss copy). */
   message?: string;
+  /** Win toast inside the slot frame, e.g. "+5 дн." */
+  toast?: string | null;
+  onToastDone?: () => void;
   daysLeft?: number | null;
   paytable?: Array<{ symbol: string; pay: number; note?: string }>;
-  /** Bonus mode UI */
   inBonus?: boolean;
   multiplier?: number;
   bonusSpinsLeft?: number | null;
-  /** Cumulative days won during the current bonus game. */
   bonusTotalDays?: number | null;
   spinLabel?: string;
 };
@@ -61,6 +62,14 @@ function randFrom(pool: readonly string[]) {
 
 function colOf(grid: string[], col: number): [string, string, string] {
   return [grid[col] || "❓", grid[3 + col] || "❓", grid[6 + col] || "❓"];
+}
+
+function colHasSymbol(grid: string[], col: number, symbol: string) {
+  return [grid[col], grid[3 + col], grid[6 + col]].includes(symbol);
+}
+
+function firstSymbolCell(grid: string[], symbol: string): number {
+  return grid.findIndex((s) => s === symbol);
 }
 
 function buildStripDown(
@@ -104,6 +113,8 @@ export function SlotMachine({
   onSpin,
   onSettled,
   message,
+  toast,
+  onToastDone,
   daysLeft,
   paytable,
   inBonus,
@@ -126,12 +137,25 @@ export function SlotMachine({
   const [landed, setLanded] = useState<[boolean, boolean, boolean]>([true, true, true]);
   const [showWin, setShowWin] = useState(false);
   const [colW, setColW] = useState(CELL);
+  const [anticipate, setAnticipate] = useState(false);
+  const [localMult, setLocalMult] = useState(multiplier);
+  const [fly, setFly] = useState<{
+    x: number;
+    y: number;
+    tx: number;
+    ty: number;
+    active: boolean;
+  } | null>(null);
+  const [toastPhase, setToastPhase] = useState<"off" | "in" | "hold" | "out">("off");
+  const [toastText, setToastText] = useState("");
 
   const stripsRef = useRef(strips);
   const offsetsRef = useRef(offsets);
   const gridRef = useRef(grid);
   const settledOnce = useRef(false);
   const windowRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const multRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     stripsRef.current = strips;
@@ -142,6 +166,9 @@ export function SlotMachine({
   useEffect(() => {
     gridRef.current = grid;
   }, [grid]);
+  useEffect(() => {
+    if (!fly?.active) setLocalMult(multiplier);
+  }, [multiplier, fly?.active]);
 
   useEffect(() => {
     const el = windowRef.current;
@@ -156,6 +183,29 @@ export function SlotMachine({
     return () => ro.disconnect();
   }, []);
 
+  // Win toast lifecycle
+  useEffect(() => {
+    if (!toast) {
+      setToastPhase("off");
+      setToastText("");
+      return;
+    }
+    setToastText(toast);
+    setToastPhase("in");
+    const tHold = window.setTimeout(() => setToastPhase("hold"), 280);
+    const tOut = window.setTimeout(() => setToastPhase("out"), 280 + TOAST_HOLD_MS);
+    const tDone = window.setTimeout(() => {
+      setToastPhase("off");
+      setToastText("");
+      onToastDone?.();
+    }, 280 + TOAST_HOLD_MS + 320);
+    return () => {
+      window.clearTimeout(tHold);
+      window.clearTimeout(tOut);
+      window.clearTimeout(tDone);
+    };
+  }, [toast, onToastDone]);
+
   // Idle
   useEffect(() => {
     if (spinning) return;
@@ -163,9 +213,10 @@ export function SlotMachine({
     setStrips([colOf(grid, 0), colOf(grid, 1), colOf(grid, 2)]);
     setOffsets([0, 0, 0]);
     setLanded([true, true, true]);
+    setAnticipate(false);
   }, [grid, spinning]);
 
-  // Spin downward
+  // Spin downward (constant speed)
   useEffect(() => {
     if (!spinning) return;
 
@@ -174,6 +225,8 @@ export function SlotMachine({
     settledOnce.current = false;
     setShowWin(false);
     setLanded([false, false, false]);
+    setAnticipate(false);
+    setFly(null);
 
     const maxY = (s: string[]) => Math.max(0, (s.length - VISIBLE) * CELL);
     const symPool = pool;
@@ -228,8 +281,18 @@ export function SlotMachine({
       return colOf(gridRef.current, col);
     });
 
+    const prelude =
+      !inBonus &&
+      colHasSymbol(book, 0, BONUS_SYMBOL) &&
+      colHasSymbol(book, 1, BONUS_SYMBOL);
+    const pads = [
+      SPIN_PAD[0],
+      SPIN_PAD[1],
+      SPIN_PAD[2] + (prelude ? Math.round(SPIN_SPEED * ANTICIPATION_SEC) : 0),
+    ];
+
     const finalStrips = [0, 1, 2].map((col) =>
-      buildStripDown(leads[col], colOf(book, col), SPIN_PAD[col], symPool)
+      buildStripDown(leads[col], colOf(book, col), pads[col], symPool)
     );
 
     setStrips(finalStrips);
@@ -246,6 +309,39 @@ export function SlotMachine({
 
     const landStart = performance.now();
     const colDone: [boolean, boolean, boolean] = [false, false, false];
+    let preludeLit = false;
+
+    const finishAfterFx = async () => {
+      if (cancelled || settledOnce.current) return;
+      settledOnce.current = true;
+      setAnticipate(false);
+
+      // Fly «Х» into multiplier during bonus
+      if (inBonus) {
+        const xIdx = firstSymbolCell(book, MULT_SYMBOL);
+        if (xIdx >= 0 && frameRef.current && multRef.current && windowRef.current) {
+          const frame = frameRef.current.getBoundingClientRect();
+          const winBox = windowRef.current.getBoundingClientRect();
+          const multBox = multRef.current.getBoundingClientRect();
+          const c = cellCenter(xIdx, colW);
+          const startX = winBox.left - frame.left + c.x;
+          const startY = winBox.top - frame.top + c.y;
+          const endX = multBox.left - frame.left + multBox.width / 2;
+          const endY = multBox.top - frame.top + multBox.height / 2;
+          setFly({ x: startX, y: startY, tx: endX, ty: endY, active: false });
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          if (cancelled) return;
+          setFly({ x: startX, y: startY, tx: endX, ty: endY, active: true });
+          await new Promise((r) => setTimeout(r, 620));
+          if (cancelled) return;
+          setLocalMult((m) => m + 1);
+          setFly(null);
+        }
+      }
+
+      setShowWin(true);
+      onSettled();
+    };
 
     const tick = (now: number) => {
       if (cancelled) return;
@@ -272,6 +368,12 @@ export function SlotMachine({
         }
       }
 
+      // Prelude highlight: reels 1–2 stopped, reel 3 still rolling
+      if (prelude && colDone[0] && colDone[1] && !colDone[2] && !preludeLit) {
+        preludeLit = true;
+        setAnticipate(true);
+      }
+
       offsetsRef.current = next;
       setOffsets(next);
 
@@ -280,11 +382,7 @@ export function SlotMachine({
         return;
       }
 
-      if (!settledOnce.current) {
-        settledOnce.current = true;
-        setShowWin(true);
-        onSettled();
-      }
+      void finishAfterFx();
     };
 
     raf = requestAnimationFrame(tick);
@@ -294,38 +392,57 @@ export function SlotMachine({
       cancelAnimationFrame(raf);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinning, resultGrid, pool]);
+  }, [spinning, resultGrid, pool, inBonus, colW]);
 
-  const busy = spinning || !landed.every(Boolean);
+  const busy = spinning || !landed.every(Boolean) || !!fly;
   const winH = CELL * VISIBLE;
   const winW = colW * 3 + GAP * 2;
 
   const linePaths = useMemo(() => {
     if (!showWin || !winningLines.length) return [];
-    return winningLines.map((li) => {
-      const cells = PAYLINES[li] || [];
-      if (cells.length < 2) return null;
-      const pts = cells.map((idx) => cellCenter(idx, colW));
-      return pts.map((p) => `${p.x},${p.y}`).join(" ");
-    }).filter(Boolean) as string[];
+    return winningLines
+      .map((li) => {
+        const cells = PAYLINES[li] || [];
+        if (cells.length < 2) return null;
+        const pts = cells.map((idx) => cellCenter(idx, colW));
+        return pts.map((p) => `${p.x},${p.y}`).join(" ");
+      })
+      .filter(Boolean) as string[];
   }, [showWin, winningLines, colW]);
+
+  const spinsLabel =
+    bonusSpinsLeft == null
+      ? "Бонус"
+      : bonusSpinsLeft <= 0
+        ? "Последний спин"
+        : `Осталось: ${bonusSpinsLeft}`;
 
   return (
     <div className="slot-wrap">
       {inBonus ? (
         <div className="slot-bonus-bar">
-          <span className="slot-mult">{multiplier}×</span>
+          <span className="slot-mult" ref={multRef}>
+            {localMult}×
+          </span>
           <span className="slot-bonus-left">
-            {bonusSpinsLeft != null ? `Осталось: ${bonusSpinsLeft}` : "Бонус"}
+            {spinsLabel}
             {bonusTotalDays != null ? ` · Итого: +${bonusTotalDays} дн.` : ""}
           </span>
         </div>
-      ) : null}
+      ) : (
+        <span ref={multRef} className="slot-mult-anchor" aria-hidden />
+      )}
 
-      <div className={`slot-frame ${busy ? "is-spinning" : ""} ${inBonus ? "is-bonus" : ""}`}>
+      <div
+        ref={frameRef}
+        className={`slot-frame ${busy ? "is-spinning" : ""} ${inBonus ? "is-bonus" : ""}`}
+      >
         <div className="slot-window" ref={windowRef}>
           {[0, 1, 2].map((col) => (
-            <div key={col} className="reel">
+            <div
+              key={col}
+              className={`reel ${anticipate && col === 2 ? "is-anticipate" : ""}`}
+            >
               <div
                 className="reel-strip"
                 style={{
@@ -362,8 +479,31 @@ export function SlotMachine({
             </svg>
           ) : null}
         </div>
+
         <div className="slot-fade top" />
         <div className="slot-fade bot" />
+
+        {toastPhase !== "off" && toastText ? (
+          <div className={`slot-toast phase-${toastPhase}`}>
+            <span>{toastText}</span>
+          </div>
+        ) : null}
+
+        {fly ? (
+          <div
+            className={`slot-fly-x ${fly.active ? "is-flying" : ""}`}
+            style={
+              {
+                "--sx": `${fly.x}px`,
+                "--sy": `${fly.y}px`,
+                "--ex": `${fly.tx}px`,
+                "--ey": `${fly.ty}px`,
+              } as CSSProperties
+            }
+          >
+            {MULT_SYMBOL}
+          </div>
+        ) : null}
       </div>
 
       <button
@@ -377,7 +517,7 @@ export function SlotMachine({
           : spinLabel || (inBonus ? "Бонус…" : "Крутить (−1 день)")}
       </button>
 
-      {!busy && message ? <p className="ma-casino-msg">{message}</p> : null}
+      {message ? <p className="ma-casino-msg">{message}</p> : null}
       <p className="ma-muted tiny">
         RTP 96% · макс. выигрыш 30 дней · осталось: <b>{daysLeft ?? "—"}</b>
       </p>
@@ -414,6 +554,15 @@ export function SlotMachine({
           font-weight: 800;
           color: #c4a35a;
           letter-spacing: 0.02em;
+          display: inline-flex;
+          min-width: 2.4rem;
+          transition: transform 0.25s ease, color 0.25s ease;
+        }
+        .slot-mult-anchor {
+          position: absolute;
+          width: 0;
+          height: 0;
+          overflow: hidden;
         }
         .slot-bonus-left {
           font-size: 0.9rem;
@@ -460,6 +609,16 @@ export function SlotMachine({
           border-radius: 14px;
           background: radial-gradient(circle at 30% 20%, #1a2d44, #060d16 75%);
           border: 1px solid rgba(232, 238, 247, 0.1);
+          transition:
+            box-shadow 0.25s ease,
+            border-color 0.25s ease;
+        }
+        .reel.is-anticipate {
+          border-color: rgba(196, 163, 90, 0.95);
+          box-shadow:
+            0 0 0 2px rgba(196, 163, 90, 0.55),
+            0 0 22px rgba(196, 163, 90, 0.45);
+          animation: anticipatePulse 0.85s ease-in-out infinite;
         }
         .reel-strip {
           will-change: transform;
@@ -489,6 +648,50 @@ export function SlotMachine({
           background: linear-gradient(to top, rgba(8, 19, 31, 0.85), transparent);
           border-radius: 0 0 14px 14px;
         }
+        .slot-toast {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          z-index: 8;
+          transform: translate(-50%, -50%) scale(0.86);
+          opacity: 0;
+          pointer-events: none;
+          padding: 12px 18px;
+          border-radius: 16px;
+          background: linear-gradient(180deg, rgba(20, 36, 52, 0.96), rgba(8, 18, 30, 0.96));
+          border: 1px solid rgba(196, 163, 90, 0.65);
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+          color: #f3e2b0;
+          font-family: var(--font-display);
+          font-size: 1.25rem;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+        }
+        .slot-toast.phase-in {
+          animation: toastIn 0.28s ease-out forwards;
+        }
+        .slot-toast.phase-hold {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
+        }
+        .slot-toast.phase-out {
+          animation: toastOut 0.32s ease-in forwards;
+        }
+        .slot-fly-x {
+          position: absolute;
+          left: 0;
+          top: 0;
+          z-index: 9;
+          font-size: 2rem;
+          line-height: 1;
+          pointer-events: none;
+          transform: translate(calc(var(--sx) - 0.5em), calc(var(--sy) - 0.5em)) scale(1);
+          filter: drop-shadow(0 0 10px rgba(196, 163, 90, 0.8));
+        }
+        .slot-fly-x.is-flying {
+          animation: flyX 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
         .slot-spin-btn {
           margin-top: 2px;
         }
@@ -498,6 +701,53 @@ export function SlotMachine({
           gap: 8px 12px;
           font-size: 0.78rem;
           color: rgba(232, 238, 247, 0.55);
+        }
+        @keyframes anticipatePulse {
+          0%,
+          100% {
+            box-shadow:
+              0 0 0 2px rgba(196, 163, 90, 0.45),
+              0 0 16px rgba(196, 163, 90, 0.3);
+          }
+          50% {
+            box-shadow:
+              0 0 0 3px rgba(196, 163, 90, 0.85),
+              0 0 28px rgba(196, 163, 90, 0.55);
+          }
+        }
+        @keyframes toastIn {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -42%) scale(0.82);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+        }
+        @keyframes toastOut {
+          from {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: translate(-50%, -58%) scale(0.9);
+          }
+        }
+        @keyframes flyX {
+          0% {
+            transform: translate(calc(var(--sx) - 0.5em), calc(var(--sy) - 0.5em)) scale(1);
+            opacity: 1;
+          }
+          60% {
+            transform: translate(calc(var(--ex) - 0.5em), calc(var(--ey) - 0.5em)) scale(1.35);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(calc(var(--ex) - 0.5em), calc(var(--ey) - 0.5em)) scale(0.4);
+            opacity: 0;
+          }
         }
       `}</style>
     </div>

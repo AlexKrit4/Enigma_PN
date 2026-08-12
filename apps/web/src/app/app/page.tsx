@@ -108,6 +108,8 @@ export default function MiniAppPage() {
   >([]);
   const [planGroup, setPlanGroup] = useState<"ограниченный" | "вечный" | "custom">("ограниченный");
   const [casinoMsg, setCasinoMsg] = useState("");
+  const [slotToast, setSlotToast] = useState<string | null>(null);
+  const [toastKey, setToastKey] = useState(0);
   const [casinoEligible, setCasinoEligible] = useState(false);
   const [casinoHint, setCasinoHint] = useState("");
   const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number; note?: string }>>([]);
@@ -269,6 +271,11 @@ export default function MiniAppPage() {
     }
   }
 
+  function showToast(text: string) {
+    setToastKey((k) => k + 1);
+    setSlotToast(text);
+  }
+
   async function spin() {
     if (!token || spinning || inBonus || bonusIntro) return;
     setSpinning(true);
@@ -278,6 +285,7 @@ export default function MiniAppPage() {
     pendingWinDaysRef.current = 0;
     pendingBonusRef.current = null;
     setCasinoMsg("");
+    setSlotToast(null);
     setWinLines([]);
     try {
       const res = await apiPost<{
@@ -294,12 +302,12 @@ export default function MiniAppPage() {
       pendingWinDaysRef.current = res.win_days || 0;
       if (res.is_bonus && res.bonus_rounds?.length) {
         pendingBonusRef.current = res.bonus_rounds;
-        pendingMsgRef.current = "";
       } else {
         pendingBonusRef.current = null;
-        pendingMsgRef.current =
-          res.win_days > 0 ? `Выигрыш: +${res.win_days} дн.` : "Не повезло — день списан.";
       }
+      // Win toast text only — no "не повезло" / plain status lines
+      pendingMsgRef.current =
+        !res.is_bonus && res.win_days > 0 ? `+${res.win_days} дн.` : "";
       setResultGrid(res.grid);
       setWinLines(res.winning_lines || []);
       await refreshMe(token);
@@ -341,8 +349,12 @@ export default function MiniAppPage() {
       return;
     }
 
-    setCasinoMsg(pendingMsgRef.current);
-    tg?.HapticFeedback?.impactOccurred(pendingWinDaysRef.current > 0 ? "heavy" : "light");
+    if (pendingMsgRef.current) {
+      showToast(pendingMsgRef.current);
+      tg?.HapticFeedback?.impactOccurred("heavy");
+    } else {
+      tg?.HapticFeedback?.impactOccurred("light");
+    }
     pendingBookRef.current = null;
     pendingMsgRef.current = "";
     pendingWinDaysRef.current = 0;
@@ -357,7 +369,6 @@ export default function MiniAppPage() {
     if (!rounds?.length) {
       pendingBonusRef.current = null;
       pendingBookRef.current = null;
-      setCasinoMsg(total > 0 ? `Выигрыш: +${total} дн.` : "");
       return;
     }
 
@@ -365,13 +376,15 @@ export default function MiniAppPage() {
     setMultiplier(1);
     setBonusAccum(0);
     setCasinoMsg("");
+    setSlotToast(null);
 
     let accumulated = 0;
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
-      setBonusSpinsLeft(rounds.length - i);
+      // Remaining spins AFTER the current one
+      setBonusSpinsLeft(rounds.length - i - 1);
       setWinLines([]);
-      setCasinoMsg("");
+      setSlotToast(null);
       const settled = waitReelSettle();
       setSpinning(true);
       setResultGrid(null);
@@ -389,21 +402,16 @@ export default function MiniAppPage() {
       setBonusAccum(accumulated);
 
       if (round.win_days > 0) {
-        setCasinoMsg(
-          `Спин: +${round.win_days} дн. (${round.multiplier}×) · Итого: +${accumulated} дн.`
-        );
+        showToast(`+${round.win_days} дн. · ${round.multiplier}×`);
         tg?.HapticFeedback?.impactOccurred("medium");
       } else if (round.x_hit) {
-        setCasinoMsg(`Х! Множитель ${round.multiplier}× · Итого: +${accumulated} дн.`);
+        showToast(`${round.multiplier}×`);
         tg?.HapticFeedback?.impactOccurred("light");
-      } else {
-        setCasinoMsg(`Без выигрыша · Итого: +${accumulated} дн.`);
       }
-      // Pause so the player can read the result before the next free spin
       await new Promise((r) => setTimeout(r, 3000));
     }
 
-    setBonusSpinsLeft(0);
+    setBonusSpinsLeft(null);
     setInBonus(false);
     pendingBonusRef.current = null;
     pendingBookRef.current = null;
@@ -418,7 +426,7 @@ export default function MiniAppPage() {
     setMultiplier(1);
     setBonusSpinsLeft(null);
     setBonusAccum(0);
-    setCasinoMsg(total > 0 ? `Бонус: +${total} дн.` : "Бонус без выигрыша");
+    if (total > 0) showToast(`Бонус: +${total} дн.`);
     pendingWinDaysRef.current = 0;
   }
 
@@ -562,12 +570,14 @@ export default function MiniAppPage() {
               onSpin={spin}
               onSettled={onSpinSettled}
               message={casinoMsg}
+              toast={slotToast ? `${slotToast}#${toastKey}` : null}
+              onToastDone={() => setSlotToast(null)}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}
               inBonus={inBonus}
               multiplier={multiplier}
               bonusSpinsLeft={bonusSpinsLeft}
-              bonusTotalDays={inBonus || bonusSpinsLeft != null ? bonusAccum : null}
+              bonusTotalDays={inBonus ? bonusAccum : null}
             />
           </div>
         </section>

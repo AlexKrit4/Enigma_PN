@@ -37,6 +37,8 @@ services:
       MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,6 +60,8 @@ services:
       MARZBAN_URL: ${MARZBAN_URL:-http://host.docker.internal:8001}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ${SOCKS5_HOST_DIR:-/opt/socks5}:/opt/socks5
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,6 +103,8 @@ services:
       - "80:80"
       # Public :443 = Xray Reality. Site/API TLS is published on host :8443.
       - "8443:443"
+      # Web admin panel: https://bigwinzone.ru:1110/admin
+      - "1110:1110"
     volumes:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/nginx/certs:ro

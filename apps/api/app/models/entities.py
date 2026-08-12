@@ -68,6 +68,7 @@ class User(Base):
 
     subscriptions: Mapped[list[Subscription]] = relationship(back_populates="user")
     orders: Mapped[list[Order]] = relationship(back_populates="user")
+    proxy_access: Mapped[ProxyAccess | None] = relationship(back_populates="user", uselist=False)
 
 
 class Plan(Base):
@@ -92,18 +93,20 @@ class Order(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
-    plan_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("plans.id"))
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("plans.id"), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.pending)
     payment_provider: Mapped[str] = mapped_column(String(32), default="yoomoney")
     payment_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     payment_label: Mapped[str] = mapped_column(String(64), unique=True, default=lambda: secrets.token_urlsafe(12))
+    # Snapshot of purchased terms: duration_days, traffic_gb, device_limit, title, kind
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="orders")
-    plan: Mapped[Plan] = relationship()
+    plan: Mapped[Plan | None] = relationship()
     payments: Mapped[list[Payment]] = relationship(back_populates="order")
 
 
@@ -132,6 +135,7 @@ class Subscription(Base):
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
     plan: Mapped[Plan | None] = relationship()
+    devices: Mapped[list[SubscriptionDevice]] = relationship(back_populates="subscription")
 
 
 class Payment(Base):
@@ -159,3 +163,74 @@ class VpnNode(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
     current_users: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    days: Mapped[int] = mapped_column(Integer, default=30)
+    traffic_gb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    device_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PromoRedemption(Base):
+    __tablename__ = "promo_redemptions"
+    __table_args__ = (UniqueConstraint("promo_id", "user_id", name="uq_promo_user"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    promo_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("promo_codes.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionDevice(Base):
+    __tablename__ = "subscription_devices"
+    __table_args__ = (UniqueConstraint("subscription_id", "hwid", name="uq_subscription_device_hwid"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="CASCADE"), index=True
+    )
+    hwid: Mapped[str] = mapped_column(String(128), index=True)
+    device_os: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    device_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    subscription: Mapped[Subscription] = relationship(back_populates="devices")
+
+
+class ProxyAccess(Base):
+    """Paid SOCKS5 Telegram proxy access bound to one bot account (per-user login)."""
+
+    __tablename__ = "proxy_access"
+    __table_args__ = (Index("ix_proxy_access_status_ends", "status", "ends_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), unique=True, index=True
+    )
+    status: Mapped[SubscriptionStatus] = mapped_column(
+        Enum(SubscriptionStatus), default=SubscriptionStatus.active
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True)
+    socks_username: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    socks_password: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="proxy_access")

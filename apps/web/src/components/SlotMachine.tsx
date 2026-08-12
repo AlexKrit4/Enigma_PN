@@ -79,6 +79,10 @@ function colHasSymbol(grid: string[], col: number, symbol: string) {
   return [grid[col], grid[3 + col], grid[6 + col]].includes(symbol);
 }
 
+function colAllSymbol(grid: string[], col: number, symbol: string) {
+  return [grid[col], grid[3 + col], grid[6 + col]].every((s) => s === symbol);
+}
+
 function firstSymbolCell(grid: string[], symbol: string): number {
   return grid.findIndex((s) => s === symbol);
 }
@@ -393,8 +397,8 @@ export function SlotMachine({
 
     const prelude =
       !inBonus &&
-      colHasSymbol(book, 0, BONUS_SYMBOL) &&
-      colHasSymbol(book, 1, BONUS_SYMBOL);
+      ((colHasSymbol(book, 0, BONUS_SYMBOL) && colHasSymbol(book, 1, BONUS_SYMBOL)) ||
+        (colAllSymbol(book, 0, "👑") && colAllSymbol(book, 1, "👑")));
     const pads = [
       SPIN_PAD[0],
       SPIN_PAD[1],

@@ -133,10 +133,38 @@ def test_pick_bonus_book_always_bonus() -> None:
 
 
 def test_bonus_buy_constants() -> None:
-    from app.services.casino import BONUS_BUY_DAYS
+    from app.services.casino import BONUS_BUY_DAYS, GOD_MODE_BUY_DAYS
 
     assert BONUS_BUY_DAYS == 15
+    assert GOD_MODE_BUY_DAYS == 80
     assert BOOK_COUNT // BONUS_BOOK_COUNT == 75
+
+
+def test_god_mode_pool() -> None:
+    from app.services.casino import (
+        GOD_MODE_JACKPOT_COUNT,
+        GOD_MODE_NEAR_MISS_COUNT,
+        JACKPOT_WIN_DAYS,
+        get_god_mode_books,
+        pick_god_mode_book,
+    )
+
+    books = get_god_mode_books()
+    assert len(books) == GOD_MODE_NEAR_MISS_COUNT + GOD_MODE_JACKPOT_COUNT == 5
+    near = [b for b in books if b.win_days == 0]
+    jack = [b for b in books if b.win_days == JACKPOT_WIN_DAYS]
+    assert len(near) == 4
+    assert len(jack) == 1
+    for b in near:
+        for row in range(3):
+            assert b.grid[row * 3 + 0] == "👑"
+            assert b.grid[row * 3 + 1] == "👑"
+            assert b.grid[row * 3 + 2] == "🍒"
+        assert b.winning_lines == ()
+    assert all(c == "👑" for c in jack[0].grid)
+    # Uniform pick covers both kinds over many draws
+    kinds = {pick_god_mode_book(Random(i)).win_days for i in range(200)}
+    assert 0 in kinds and JACKPOT_WIN_DAYS in kinds
 
 
 def test_pick_book_deterministic_with_seed() -> None:

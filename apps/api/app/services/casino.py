@@ -48,6 +48,9 @@ JACKPOT_WIN_DAYS = 365  # 1 book: full board of crowns
 MAX_WIN_DAYS = JACKPOT_WIN_DAYS
 BONUS_ROUNDS = 7
 BONUS_BUY_DAYS = 15  # purchase: next spin is forced bonus book
+GOD_MODE_BUY_DAYS = 80  # purchase: next spin from 5-book pool (20% jackpot)
+GOD_MODE_NEAR_MISS_COUNT = 4
+GOD_MODE_JACKPOT_COUNT = 1
 BOOK_COUNT = 30_000
 BONUS_BOOK_COUNT = 400  # 1 in 75
 TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle
@@ -128,6 +131,8 @@ class SpinResult:
     bonus_rounds: list[dict] = field(default_factory=list)
     bonus_pending: bool = False
     bonus_bought: bool = False
+    god_mode_pending: bool = False
+    god_mode_bought: bool = False
 
 
 @dataclass(frozen=True)
@@ -137,6 +142,18 @@ class BuyBonusResult:
     cost_days: int
     days_left: int | None
     subscription: dict | None
+    bonus_pending: bool = False
+    god_mode_pending: bool = False
+
+
+@dataclass(frozen=True)
+class BuyGodModeResult:
+    ok: bool
+    message: str
+    cost_days: int
+    days_left: int | None
+    subscription: dict | None
+    god_mode_pending: bool = False
     bonus_pending: bool = False
 
 
@@ -562,6 +579,43 @@ def pick_bonus_book(rng: Random | None = None) -> Book:
     return books[rng.randrange(len(books))]
 
 
+def _god_mode_near_miss_grid() -> tuple[str, ...]:
+    """Reels 1–2 full crowns, reel 3 full cherries — no paying line."""
+    cells: list[str] = []
+    for row in range(3):
+        cells.extend(["👑", "👑", "🍒"])
+    return tuple(cells)
+
+
+@lru_cache(maxsize=1)
+def get_god_mode_books() -> tuple[Book, ...]:
+    """
+    Feature pool for GOD MODE: 4 near-miss + 1 jackpot → 20% jackpot chance.
+    Separate from the main 30k RTP bank.
+    """
+    near_grid = _god_mode_near_miss_grid()
+    near = tuple(
+        Book(index=-(i + 1), win_days=0, grid=near_grid, winning_lines=())
+        for i in range(GOD_MODE_NEAR_MISS_COUNT)
+    )
+    jackpot = Book(
+        index=-100,
+        win_days=JACKPOT_WIN_DAYS,
+        grid=tuple(["👑"] * 9),
+        winning_lines=tuple(range(len(PAYLINES))),
+    )
+    assert len(near) == GOD_MODE_NEAR_MISS_COUNT
+    assert GOD_MODE_JACKPOT_COUNT == 1
+    return (*near, jackpot)
+
+
+def pick_god_mode_book(rng: Random | None = None) -> Book:
+    books = get_god_mode_books()
+    if rng is None:
+        return books[secrets.randbelow(len(books))]
+    return books[rng.randrange(len(books))]
+
+
 def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
     if not sub:
         return False, "Нужна активная подписка."
@@ -573,17 +627,45 @@ def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
     return True, "OK"
 
 
-def bonus_buy_eligible(sub: Subscription | None, *, pending: bool) -> tuple[bool, str]:
+def bonus_buy_eligible(
+    sub: Subscription | None,
+    *,
+    pending: bool,
+    god_mode_pending: bool = False,
+) -> tuple[bool, str]:
     ok, msg = casino_eligible(sub)
     if not ok:
         return False, msg
     if pending:
         return False, "Бонус уже куплен — следующий спин запустит бонусную игру."
+    if god_mode_pending:
+        return False, "Сначала сыграйте купленный GOD MODE."
     assert sub is not None
     left = days_left(sub.ends_at)
     need = BONUS_BUY_DAYS + MIN_DAYS_TO_PLAY
     if left < need:
         return False, f"Нужно минимум {need} дней: {BONUS_BUY_DAYS} за покупку + запас на спин."
+    return True, "OK"
+
+
+def god_mode_buy_eligible(
+    sub: Subscription | None,
+    *,
+    pending: bool,
+    bonus_pending: bool = False,
+) -> tuple[bool, str]:
+    ok, msg = casino_eligible(sub)
+    if not ok:
+        return False, msg
+    if pending:
+        return False, "GOD MODE уже куплен — следующий спин из спецпула."
+    if bonus_pending:
+        return False, "Сначала сыграйте купленный бонус."
+    assert sub is not None
+    left = days_left(sub.ends_at)
+    need = GOD_MODE_BUY_DAYS + MIN_DAYS_TO_PLAY
+    if left < need:
+        return False, f"Нужно минимум {need} дней: {GOD_MODE_BUY_DAYS} за покупку + запас на спин."
     return True, "OK"
 
 
@@ -622,7 +704,11 @@ async def buy_casino_bonus(
         )
 
     sub = await get_active_subscription(db, user.id)
-    ok, msg = bonus_buy_eligible(sub, pending=bool(user.casino_bonus_pending))
+    ok, msg = bonus_buy_eligible(
+        sub,
+        pending=bool(user.casino_bonus_pending),
+        god_mode_pending=bool(user.casino_god_mode_pending),
+    )
     if not ok or sub is None:
         return BuyBonusResult(
             ok=False,
@@ -631,6 +717,7 @@ async def buy_casino_bonus(
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
             bonus_pending=bool(user.casino_bonus_pending),
+            god_mode_pending=bool(user.casino_god_mode_pending),
         )
 
     now = _now()
@@ -663,6 +750,75 @@ async def buy_casino_bonus(
         days_left=days_left(sub.ends_at),
         subscription=sub_data,
         bonus_pending=True,
+        god_mode_pending=False,
+    )
+
+
+async def buy_casino_god_mode(
+    db: AsyncSession,
+    *,
+    user: User,
+    settings: Settings | None = None,
+) -> BuyGodModeResult:
+    """Charge GOD_MODE_BUY_DAYS; next spin picks from 5-book GOD MODE pool."""
+    settings = settings or get_settings()
+    if not settings.casino_enabled:
+        return BuyGodModeResult(
+            ok=False,
+            message="Казино временно выключено.",
+            cost_days=GOD_MODE_BUY_DAYS,
+            days_left=None,
+            subscription=None,
+        )
+
+    sub = await get_active_subscription(db, user.id)
+    ok, msg = god_mode_buy_eligible(
+        sub,
+        pending=bool(user.casino_god_mode_pending),
+        bonus_pending=bool(user.casino_bonus_pending),
+    )
+    if not ok or sub is None:
+        return BuyGodModeResult(
+            ok=False,
+            message=msg,
+            cost_days=GOD_MODE_BUY_DAYS,
+            days_left=days_left(sub.ends_at) if sub else None,
+            subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
+            god_mode_pending=bool(user.casino_god_mode_pending),
+            bonus_pending=bool(user.casino_bonus_pending),
+        )
+
+    now = _now()
+    sub.ends_at = sub.ends_at - timedelta(days=GOD_MODE_BUY_DAYS)
+    if sub.ends_at <= now:
+        sub.status = SubscriptionStatus.expired
+    user.casino_god_mode_pending = True
+
+    db.add(
+        CasinoSpin(
+            user_id=user.id,
+            subscription_id=sub.id,
+            bet_days=GOD_MODE_BUY_DAYS,
+            win_days=0,
+            net_days=-GOD_MODE_BUY_DAYS,
+            grid=["GOD_MODE_BUY"],
+            winning_lines=[],
+        )
+    )
+    await _sync_expire(sub, settings)
+    await db.commit()
+    await db.refresh(sub)
+    await db.refresh(user)
+
+    sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    return BuyGodModeResult(
+        ok=True,
+        message="GOD MODE куплен — следующий спин из спецпула (20% джекпот).",
+        cost_days=GOD_MODE_BUY_DAYS,
+        days_left=days_left(sub.ends_at),
+        subscription=sub_data,
+        god_mode_pending=True,
+        bonus_pending=False,
     )
 
 
@@ -703,13 +859,18 @@ async def spin_casino(
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
             bonus_pending=bool(user.casino_bonus_pending),
+            god_mode_pending=bool(user.casino_god_mode_pending),
         )
 
     rng = Random(seed) if seed is not None else None
     bonus_bought = bool(user.casino_bonus_pending)
+    god_mode_bought = bool(user.casino_god_mode_pending)
     if bonus_bought:
         book = pick_bonus_book(rng)
         user.casino_bonus_pending = False
+    elif god_mode_bought:
+        book = pick_god_mode_book(rng)
+        user.casino_god_mode_pending = False
     else:
         book = pick_book(rng)
     payout = book.win_days
@@ -757,4 +918,6 @@ async def spin_casino(
         bonus_rounds=bonus_payload,
         bonus_pending=False,
         bonus_bought=bonus_bought,
+        god_mode_pending=False,
+        god_mode_bought=god_mode_bought,
     )

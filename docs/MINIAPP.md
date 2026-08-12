@@ -28,3 +28,9 @@ NEXT_PUBLIC_API_URL=https://api.bigwinzone.ru
 - `POST /api/v1/miniapp/trial|orders|orders/custom`
 - `GET /api/v1/miniapp/casino/status`
 - `POST /api/v1/miniapp/casino/spin`
+
+## Важно
+
+1. BotFather → Bot Settings → Domain: `bigwinzone.ru`
+2. В боте `/start` → кнопка **Кабинет**
+3. Казино: только безлимитный тариф, ставка 1 день

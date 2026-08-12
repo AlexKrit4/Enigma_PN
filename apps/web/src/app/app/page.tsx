@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SlotMachine } from "../../components/SlotMachine";
 import {
   apiGet,
   apiPost,
@@ -28,14 +29,6 @@ declare global {
     Telegram?: { WebApp?: TgWebApp };
   }
 }
-
-const PAYLINES = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 4, 8],
-  [2, 4, 6],
-];
 
 function formatDate(iso?: string) {
   if (!iso) return "—";
@@ -117,6 +110,7 @@ export default function MiniAppPage() {
   const [casinoMsg, setCasinoMsg] = useState("");
   const [casinoEligible, setCasinoEligible] = useState(false);
   const [casinoHint, setCasinoHint] = useState("");
+  const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [winLines, setWinLines] = useState<number[]>([]);
   const [spinning, setSpinning] = useState(false);
@@ -137,9 +131,11 @@ export default function MiniAppPage() {
           eligible: boolean;
           message: string;
           enabled: boolean;
+          paytable?: Array<{ symbol: string; pay: number }>;
         }>("/api/v1/miniapp/casino/status", jwt);
         setCasinoEligible(Boolean(st.eligible));
         setCasinoHint(st.message);
+        if (st.paytable?.length) setPaytable(st.paytable);
       } catch {
         setCasinoEligible(false);
       }
@@ -266,10 +262,6 @@ export default function MiniAppPage() {
     setSpinning(true);
     setCasinoMsg("");
     setWinLines([]);
-    // cosmetic shuffle
-    const tick = setInterval(() => {
-      setGrid(Array.from({ length: 9 }, () => ["🍒", "🍋", "🔔", "⭐", "💎"][Math.floor(Math.random() * 5)]));
-    }, 80);
     try {
       const res = await apiPost<{
         grid: string[];
@@ -279,27 +271,17 @@ export default function MiniAppPage() {
         message: string;
         days_left: number;
       }>("/api/v1/miniapp/casino/spin", token);
-      clearInterval(tick);
       setGrid(res.grid);
       setWinLines(res.winning_lines || []);
       setCasinoMsg(res.message);
       tg?.HapticFeedback?.impactOccurred(res.win_days > 0 ? "heavy" : "light");
       await refreshMe(token);
     } catch (e) {
-      clearInterval(tick);
       setCasinoMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setSpinning(false);
     }
   }
-
-  const highlight = useMemo(() => {
-    const set = new Set<number>();
-    for (const li of winLines) {
-      for (const idx of PAYLINES[li] || []) set.add(idx);
-    }
-    return set;
-  }, [winLines]);
 
   if (loading) {
     return <div className="ma-shell ma-center">Загрузка…</div>;
@@ -428,28 +410,20 @@ export default function MiniAppPage() {
           <div className="ma-card">
             <h2>Слот 3×3</h2>
             <p className="ma-muted">
-              5 линий · ставка <b>1 день</b> · RTP ~96%. Только при безлимитном трафике.
+              10 000 книг · 5 линий · ставка <b>1 день</b> (фикс.) · RTP 96% · макс. 30 дней.
+              Только безлимитный трафик.
             </p>
             {!casinoEligible ? <p className="ma-alert soft">{casinoHint || "Недоступно"}</p> : null}
-            <div className="ma-slot">
-              {grid.map((sym, i) => (
-                <div key={i} className={`ma-cell ${highlight.has(i) ? "win" : ""} ${spinning ? "spin" : ""}`}>
-                  {sym}
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="ma-btn ma-btn-primary"
-              disabled={!casinoEligible || spinning}
-              onClick={spin}
-            >
-              {spinning ? "Крутим…" : "Крутить (−1 день)"}
-            </button>
-            {casinoMsg ? <p className="ma-casino-msg">{casinoMsg}</p> : null}
-            <p className="ma-muted tiny">
-              Осталось дней: <b>{me?.subscription?.days_left ?? "—"}</b>
-            </p>
+            <SlotMachine
+              grid={grid}
+              winningLines={winLines}
+              spinning={spinning}
+              disabled={!casinoEligible}
+              onSpin={spin}
+              message={casinoMsg}
+              daysLeft={me?.subscription?.days_left}
+              paytable={paytable}
+            />
           </div>
         </section>
       ) : null}

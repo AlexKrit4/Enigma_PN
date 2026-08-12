@@ -1,37 +1,57 @@
 from __future__ import annotations
 
-from app.services.casino import PAYOUT_WEIGHTS, _grid_for_payout, _pick_payout, expected_rtp
-import random
+from collections import Counter
+
+from app.services.casino import (
+    BOOK_COUNT,
+    LINE_PAY,
+    MAX_WIN_DAYS,
+    TARGET_RETURN_DAYS,
+    WIN_BOOK_COUNTS,
+    books_rtp,
+    get_books,
+    pick_book,
+)
+from random import Random
 
 
-def test_casino_rtp_target() -> None:
-    assert abs(expected_rtp() - 0.96) < 1e-9
+def test_books_count_and_rtp() -> None:
+    books = get_books()
+    assert len(books) == BOOK_COUNT
+    assert sum(b.win_days for b in books) == TARGET_RETURN_DAYS
+    assert books_rtp() == 0.96
+    assert max(b.win_days for b in books) == MAX_WIN_DAYS
 
 
-def test_casino_empirical_rtp() -> None:
-    rng = random.Random(42)
-    n = 100_000
-    total = sum(_pick_payout(rng) for _ in range(n))
-    empirical = total / n
-    assert 0.94 <= empirical <= 0.98
+def test_books_distribution_matches_table() -> None:
+    counts = Counter(b.win_days for b in get_books())
+    for amount, expected in WIN_BOOK_COUNTS:
+        assert counts[amount] == expected
+    expected_zeros = BOOK_COUNT - sum(c for _, c in WIN_BOOK_COUNTS)
+    assert counts[0] == expected_zeros
 
 
-def test_loss_grid_has_no_three_kind() -> None:
-    rng = random.Random(7)
-    for _ in range(200):
-        grid, lines = _grid_for_payout(0, rng)
-        assert lines == []
-        assert len(grid) == 9
+def test_books_grids_consistent() -> None:
+    for book in get_books()[::97]:  # sample
+        assert len(book.grid) == 9
+        if book.win_days == 0:
+            assert book.winning_lines == ()
+        else:
+            assert book.winning_lines
+            line = book.winning_lines[0]
+            from app.services.casino import PAYLINES
+
+            a, b, c = PAYLINES[line]
+            assert book.grid[a] == book.grid[b] == book.grid[c]
+            assert LINE_PAY[book.grid[a]] == book.win_days
 
 
-def test_win_grid_has_matching_line() -> None:
-    rng = random.Random(9)
-    for payout in (1, 2, 3, 5, 10):
-        grid, lines = _grid_for_payout(payout, rng)
-        assert lines
-        a, b, c = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 4, 8), (2, 4, 6)][lines[0]]
-        assert grid[a] == grid[b] == grid[c]
+def test_pick_book_deterministic_with_seed() -> None:
+    a = pick_book(Random(1))
+    b = pick_book(Random(1))
+    assert a.index == b.index
+    assert a.grid == b.grid
 
 
-def test_weights_sum_to_one() -> None:
-    assert abs(sum(w for _, w in PAYOUT_WEIGHTS) - 1.0) < 1e-9
+def test_max_win_capped() -> None:
+    assert all(b.win_days <= MAX_WIN_DAYS for b in get_books())

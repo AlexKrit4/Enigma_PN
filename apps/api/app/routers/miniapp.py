@@ -12,7 +12,15 @@ from app.db import get_db
 from app.deps import create_access_token, get_current_user, get_or_create_telegram_user
 from app.models.entities import Plan, User
 from app.schemas import UserOut
-from app.services.casino import BET_DAYS, casino_eligible, expected_rtp, spin_casino
+from app.services.casino import (
+    BET_DAYS,
+    BOOK_COUNT,
+    MAX_WIN_DAYS,
+    books_rtp,
+    casino_eligible,
+    paytable_public,
+    spin_casino,
+)
 from app.services.pricing import calc_custom_price, custom_price_breakdown, validate_custom_tariff
 from app.services.provisioning import (
     create_order,
@@ -199,9 +207,13 @@ async def casino_status(
         "eligible": eligible and settings.casino_enabled,
         "message": message if settings.casino_enabled else "Казино выключено.",
         "bet_days": BET_DAYS,
-        "rtp": round(expected_rtp(), 4),
+        "bet_fixed": True,
+        "rtp": books_rtp(),
+        "books": BOOK_COUNT,
+        "max_win_days": MAX_WIN_DAYS,
         "lines": 5,
         "grid": "3x3",
+        "paytable": paytable_public(),
         "subscription": await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
         if sub
         else None,
@@ -224,8 +236,10 @@ async def casino_spin(
         "net_days": result.net_days,
         "grid": result.grid,
         "winning_lines": result.winning_lines,
+        "book_index": result.book_index,
         "days_left": result.days_left,
         "subscription": result.subscription,
+        "max_win_days": MAX_WIN_DAYS,
         "message": (
             f"Выигрыш: +{result.win_days} дн." if result.win_days > 0 else "Не повезло — день списан."
         ),

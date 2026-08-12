@@ -19,6 +19,7 @@ from app.services.casino import (
     books_rtp,
     get_books,
     pick_book,
+    pick_bonus_book,
 )
 
 
@@ -122,6 +123,20 @@ def test_books_grids_consistent() -> None:
             a, b, c = PAYLINES[line]
             assert book.grid[a] == book.grid[b] == book.grid[c]
             assert LINE_PAY[book.grid[a]] == book.win_days
+
+
+def test_pick_bonus_book_always_bonus() -> None:
+    for seed in range(20):
+        book = pick_bonus_book(Random(seed))
+        assert book.is_bonus
+        assert book.bonus_rounds
+
+
+def test_bonus_buy_constants() -> None:
+    from app.services.casino import BONUS_BUY_DAYS
+
+    assert BONUS_BUY_DAYS == 15
+    assert BOOK_COUNT // BONUS_BOOK_COUNT == 75
 
 
 def test_pick_book_deterministic_with_seed() -> None:

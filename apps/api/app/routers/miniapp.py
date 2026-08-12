@@ -14,9 +14,12 @@ from app.models.entities import Plan, User
 from app.schemas import UserOut
 from app.services.casino import (
     BET_DAYS,
+    BONUS_BUY_DAYS,
     BOOK_COUNT,
     MAX_WIN_DAYS,
+    bonus_buy_eligible,
     books_rtp,
+    buy_casino_bonus,
     casino_eligible,
     paytable_public,
     spin_casino,
@@ -202,6 +205,7 @@ async def casino_status(
 ) -> dict:
     sub = await get_active_subscription(db, user.id)
     eligible, message = casino_eligible(sub)
+    can_buy, buy_msg = bonus_buy_eligible(sub, pending=bool(user.casino_bonus_pending))
     return {
         "enabled": settings.casino_enabled,
         "eligible": eligible and settings.casino_enabled,
@@ -214,9 +218,32 @@ async def casino_status(
         "lines": 5,
         "grid": "3x3",
         "paytable": paytable_public(),
+        "bonus_buy_days": BONUS_BUY_DAYS,
+        "bonus_pending": bool(user.casino_bonus_pending),
+        "bonus_buy_eligible": can_buy and settings.casino_enabled,
+        "bonus_buy_message": buy_msg if settings.casino_enabled else "Казино выключено.",
         "subscription": await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
         if sub
         else None,
+    }
+
+
+@router.post("/casino/buy-bonus")
+async def casino_buy_bonus(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    result = await buy_casino_bonus(db, user=user, settings=settings)
+    if not result.ok:
+        raise HTTPException(status_code=400, detail=result.message)
+    return {
+        "ok": True,
+        "cost_days": result.cost_days,
+        "days_left": result.days_left,
+        "subscription": result.subscription,
+        "bonus_pending": result.bonus_pending,
+        "message": result.message,
     }
 
 
@@ -243,6 +270,8 @@ async def casino_spin(
         "is_bonus": result.is_bonus,
         "bonus_spins": len(result.bonus_rounds),
         "bonus_rounds": result.bonus_rounds,
+        "bonus_pending": result.bonus_pending,
+        "bonus_bought": result.bonus_bought,
         "message": (
             "Bonus! 7 спинов"
             if result.is_bonus

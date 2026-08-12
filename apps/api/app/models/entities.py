@@ -64,6 +64,7 @@ class User(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    casino_bonus_pending: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     subscriptions: Mapped[list[Subscription]] = relationship(back_populates="user")

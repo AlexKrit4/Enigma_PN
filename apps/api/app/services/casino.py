@@ -47,6 +47,7 @@ MIN_DAYS_TO_PLAY = 2
 JACKPOT_WIN_DAYS = 365  # 1 book: full board of crowns
 MAX_WIN_DAYS = JACKPOT_WIN_DAYS
 BONUS_ROUNDS = 7
+BONUS_BUY_DAYS = 15  # purchase: next spin is forced bonus book
 BOOK_COUNT = 30_000
 BONUS_BOOK_COUNT = 400  # 1 in 75
 TARGET_RETURN_DAYS = 28_800  # RTP 96% over full book cycle
@@ -125,6 +126,18 @@ class SpinResult:
     subscription: dict | None
     is_bonus: bool = False
     bonus_rounds: list[dict] = field(default_factory=list)
+    bonus_pending: bool = False
+    bonus_bought: bool = False
+
+
+@dataclass(frozen=True)
+class BuyBonusResult:
+    ok: bool
+    message: str
+    cost_days: int
+    days_left: int | None
+    subscription: dict | None
+    bonus_pending: bool = False
 
 
 def _scrub_pay_lines(cells: list[str], rng: Random, protect: set[int] | None = None) -> None:
@@ -539,6 +552,16 @@ def pick_book(rng: Random | None = None) -> Book:
     return books[rng.randrange(len(books))]
 
 
+def pick_bonus_book(rng: Random | None = None) -> Book:
+    """Random book from the bonus subset only (for purchased bonus activation)."""
+    books = [b for b in get_books() if b.is_bonus]
+    if not books:
+        raise RuntimeError("No bonus books available")
+    if rng is None:
+        return books[secrets.randbelow(len(books))]
+    return books[rng.randrange(len(books))]
+
+
 def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
     if not sub:
         return False, "Нужна активная подписка."
@@ -547,6 +570,20 @@ def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
     left = days_left(sub.ends_at)
     if left < MIN_DAYS_TO_PLAY:
         return False, f"Нужно минимум {MIN_DAYS_TO_PLAY} дня подписки, чтобы поставить {BET_DAYS} день."
+    return True, "OK"
+
+
+def bonus_buy_eligible(sub: Subscription | None, *, pending: bool) -> tuple[bool, str]:
+    ok, msg = casino_eligible(sub)
+    if not ok:
+        return False, msg
+    if pending:
+        return False, "Бонус уже куплен — следующий спин запустит бонусную игру."
+    assert sub is not None
+    left = days_left(sub.ends_at)
+    need = BONUS_BUY_DAYS + MIN_DAYS_TO_PLAY
+    if left < need:
+        return False, f"Нужно минимум {need} дней: {BONUS_BUY_DAYS} за покупку + запас на спин."
     return True, "OK"
 
 
@@ -565,6 +602,68 @@ async def _sync_expire(sub: Subscription, settings: Settings) -> None:
         )
     except Exception as exc:  # noqa: BLE001 — casino must not 500 if Marzban is down
         log.warning("casino_marzban_sync_failed", username=sub.marzban_username, error=str(exc))
+
+
+async def buy_casino_bonus(
+    db: AsyncSession,
+    *,
+    user: User,
+    settings: Settings | None = None,
+) -> BuyBonusResult:
+    """Charge BONUS_BUY_DAYS; next spin will force a bonus book."""
+    settings = settings or get_settings()
+    if not settings.casino_enabled:
+        return BuyBonusResult(
+            ok=False,
+            message="Казино временно выключено.",
+            cost_days=BONUS_BUY_DAYS,
+            days_left=None,
+            subscription=None,
+        )
+
+    sub = await get_active_subscription(db, user.id)
+    ok, msg = bonus_buy_eligible(sub, pending=bool(user.casino_bonus_pending))
+    if not ok or sub is None:
+        return BuyBonusResult(
+            ok=False,
+            message=msg,
+            cost_days=BONUS_BUY_DAYS,
+            days_left=days_left(sub.ends_at) if sub else None,
+            subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
+            bonus_pending=bool(user.casino_bonus_pending),
+        )
+
+    now = _now()
+    sub.ends_at = sub.ends_at - timedelta(days=BONUS_BUY_DAYS)
+    if sub.ends_at <= now:
+        sub.status = SubscriptionStatus.expired
+    user.casino_bonus_pending = True
+
+    db.add(
+        CasinoSpin(
+            user_id=user.id,
+            subscription_id=sub.id,
+            bet_days=BONUS_BUY_DAYS,
+            win_days=0,
+            net_days=-BONUS_BUY_DAYS,
+            grid=["BONUS_BUY"],
+            winning_lines=[],
+        )
+    )
+    await _sync_expire(sub, settings)
+    await db.commit()
+    await db.refresh(sub)
+    await db.refresh(user)
+
+    sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
+    return BuyBonusResult(
+        ok=True,
+        message="Бонус куплен — следующий спин запустит бонусную игру.",
+        cost_days=BONUS_BUY_DAYS,
+        days_left=days_left(sub.ends_at),
+        subscription=sub_data,
+        bonus_pending=True,
+    )
 
 
 async def spin_casino(
@@ -603,10 +702,16 @@ async def spin_casino(
             book_index=None,
             days_left=days_left(sub.ends_at) if sub else None,
             subscription=await serialize_subscription_with_devices(db, sub, settings) if sub else None,
+            bonus_pending=bool(user.casino_bonus_pending),
         )
 
     rng = Random(seed) if seed is not None else None
-    book = pick_book(rng)
+    bonus_bought = bool(user.casino_bonus_pending)
+    if bonus_bought:
+        book = pick_bonus_book(rng)
+        user.casino_bonus_pending = False
+    else:
+        book = pick_book(rng)
     payout = book.win_days
     grid = list(book.grid)
     winning_lines = list(book.winning_lines)
@@ -634,6 +739,7 @@ async def spin_casino(
     await _sync_expire(sub, settings)
     await db.commit()
     await db.refresh(sub)
+    await db.refresh(user)
 
     sub_data = await serialize_subscription_with_devices(db, sub, settings, include_devices=True)
     return SpinResult(
@@ -649,4 +755,6 @@ async def spin_casino(
         subscription=sub_data,
         is_bonus=book.is_bonus,
         bonus_rounds=bonus_payload,
+        bonus_pending=False,
+        bonus_bought=bonus_bought,
     )

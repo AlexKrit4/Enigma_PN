@@ -112,6 +112,10 @@ export default function MiniAppPage() {
   const [toastKey, setToastKey] = useState(0);
   const [casinoEligible, setCasinoEligible] = useState(false);
   const [casinoHint, setCasinoHint] = useState("");
+  const [bonusPending, setBonusPending] = useState(false);
+  const [bonusBuyEligible, setBonusBuyEligible] = useState(false);
+  const [bonusBuyDays, setBonusBuyDays] = useState(15);
+  const [buyingBonus, setBuyingBonus] = useState(false);
   const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number; note?: string }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [resultGrid, setResultGrid] = useState<string[] | null>(null);
@@ -146,9 +150,15 @@ export default function MiniAppPage() {
           message: string;
           enabled: boolean;
           paytable?: Array<{ symbol: string; pay: number; note?: string }>;
+          bonus_pending?: boolean;
+          bonus_buy_eligible?: boolean;
+          bonus_buy_days?: number;
         }>("/api/v1/miniapp/casino/status", jwt);
         setCasinoEligible(Boolean(st.eligible));
         setCasinoHint(st.message);
+        setBonusPending(Boolean(st.bonus_pending));
+        setBonusBuyEligible(Boolean(st.bonus_buy_eligible));
+        if (typeof st.bonus_buy_days === "number") setBonusBuyDays(st.bonus_buy_days);
         if (st.paytable?.length) setPaytable(st.paytable);
       } catch {
         setCasinoEligible(false);
@@ -276,6 +286,43 @@ export default function MiniAppPage() {
     setSlotToast(text);
   }
 
+  async function buyBonus() {
+    if (!token || buyingBonus || spinning || inBonus || bonusIntro || bonusPending) return;
+    setBuyingBonus(true);
+    setCasinoMsg("");
+    try {
+      const res = await apiPost<{
+        message: string;
+        days_left: number;
+        bonus_pending: boolean;
+        subscription?: Me["subscription"];
+      }>("/api/v1/miniapp/casino/buy-bonus", token);
+      setBonusPending(Boolean(res.bonus_pending));
+      setBonusBuyEligible(false);
+      setCasinoMsg(res.message);
+      if (res.subscription || typeof res.days_left === "number") {
+        setMe((prev) =>
+          prev
+            ? {
+                ...prev,
+                subscription: res.subscription
+                  ? { ...prev.subscription, ...res.subscription, days_left: res.days_left }
+                  : prev.subscription
+                    ? { ...prev.subscription, days_left: res.days_left }
+                    : prev.subscription,
+              }
+            : prev
+        );
+      }
+      tg?.HapticFeedback?.notificationOccurred("success");
+    } catch (e) {
+      setCasinoMsg(e instanceof Error ? e.message : String(e));
+      tg?.HapticFeedback?.notificationOccurred("error");
+    } finally {
+      setBuyingBonus(false);
+    }
+  }
+
   async function spin() {
     if (!token || spinning || inBonus || bonusIntro) return;
     setSpinning(true);
@@ -297,6 +344,9 @@ export default function MiniAppPage() {
         days_left: number;
         is_bonus?: boolean;
         bonus_rounds?: BonusRoundView[];
+        bonus_pending?: boolean;
+        bonus_bought?: boolean;
+        subscription?: Me["subscription"];
       }>("/api/v1/miniapp/casino/spin", token);
       pendingBookRef.current = res.grid;
       pendingWinDaysRef.current = res.win_days || 0;
@@ -579,7 +629,31 @@ export default function MiniAppPage() {
               multiplier={multiplier}
               bonusSpinsLeft={bonusSpinsLeft}
               bonusTotalDays={inBonus ? bonusAccum : null}
+              spinLabel={bonusPending ? "Запустить бонус (−1 день)" : undefined}
             />
+            {casinoEligible ? (
+              <div className="ma-bonus-buy">
+                {bonusPending ? (
+                  <p className="ma-alert soft">Бонус куплен — следующий спин запустит бонусную игру.</p>
+                ) : (
+                  <button
+                    type="button"
+                    className="ma-btn ma-btn-ghost"
+                    disabled={
+                      !bonusBuyEligible ||
+                      buyingBonus ||
+                      spinning ||
+                      inBonus ||
+                      bonusIntro ||
+                      bonusEndTotal != null
+                    }
+                    onClick={buyBonus}
+                  >
+                    {buyingBonus ? "Покупка…" : `Купить бонус (−${bonusBuyDays} дн.)`}
+                  </button>
+                )}
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -733,6 +807,14 @@ export default function MiniAppPage() {
         .ma-btn-primary {
           background: linear-gradient(180deg, #c4a35a, #9a7a35);
           color: #1a1205;
+        }
+        .ma-btn-ghost {
+          background: transparent;
+          border: 1px solid rgba(196, 163, 90, 0.45);
+          color: #e8d5a3;
+        }
+        .ma-bonus-buy {
+          margin-top: 12px;
         }
         .ma-btn:disabled {
           opacity: 0.45;

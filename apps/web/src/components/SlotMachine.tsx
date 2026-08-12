@@ -177,6 +177,8 @@ export function SlotMachine({
   const multRef = useRef<HTMLSpanElement | null>(null);
   const toastRef = useRef<HTMLDivElement | null>(null);
   const revealBusy = useRef(false);
+  const onWinRevealDoneRef = useRef(onWinRevealDone);
+  onWinRevealDoneRef.current = onWinRevealDone;
 
   useEffect(() => {
     stripsRef.current = strips;
@@ -304,7 +306,7 @@ export function SlotMachine({
       setToastText("");
       setToastPop(false);
       revealBusy.current = false;
-      onWinRevealDone?.();
+      onWinRevealDoneRef.current?.();
     })();
 
     return () => {
@@ -312,7 +314,7 @@ export function SlotMachine({
       revealBusy.current = false;
       setMultLaunching(false);
     };
-  }, [winReveal, winRevealKey, onWinRevealDone]);
+  }, [winReveal, winRevealKey]);
 
   // Idle
   useEffect(() => {

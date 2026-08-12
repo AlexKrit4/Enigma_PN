@@ -14,6 +14,10 @@ from app.services.happ import days_left
 from app.services.marzban import MarzbanClient, to_unix
 from app.services.provisioning import _now, get_active_subscription, serialize_subscription_with_devices
 
+import structlog
+
+log = structlog.get_logger(__name__)
+
 # --- Slot layout -----------------------------------------------------------------
 # Regular pay symbols (no bonus / no mult)
 PAY_SYMBOLS = ("🍒", "🍋", "🔔", "⭐", "💎", "7️⃣", "👑")
@@ -253,26 +257,6 @@ def _fill_bonus_round_grid(
     return cells, winning_lines, base, x_hit
 
 
-def _split_bonus_total(total: int, rounds: int, rng: Random) -> list[int]:
-    """Split total into `rounds` non-negative parts (many zeros OK)."""
-    if total <= 0:
-        return [0] * rounds
-    active = min(rounds, max(1, rng.randint(2, 5)))
-    weights = [rng.random() + 0.2 for _ in range(active)]
-    s = sum(weights)
-    parts = [0] * rounds
-    idxs = list(range(rounds))
-    rng.shuffle(idxs)
-    chosen = idxs[:active]
-    assigned = 0
-    for i, w in zip(chosen[:-1], weights[:-1]):
-        parts[i] = int(total * (w / s))
-        assigned += parts[i]
-    parts[chosen[-1]] = max(0, total - assigned)
-    assert sum(parts) == total
-    return parts
-
-
 def _build_bonus_book_body(total: int, rng: Random) -> tuple[list[str], list[int], tuple[BonusRound, ...]]:
     """
     Build trigger (3×В) + 7 free spins whose credited win_days sum to `total`.
@@ -459,15 +443,18 @@ def casino_eligible(sub: Subscription | None) -> tuple[bool, str]:
 async def _sync_expire(sub: Subscription, settings: Settings) -> None:
     if not sub.marzban_username:
         return
-    marzban = MarzbanClient(settings)
-    data_limit = int(sub.traffic_limit_gb * 1024**3) if sub.traffic_limit_gb else 0
-    status = "active" if sub.status in {SubscriptionStatus.active, SubscriptionStatus.trial} else "disabled"
-    await marzban.modify_user(
-        sub.marzban_username,
-        expire_ts=to_unix(sub.ends_at),
-        status=status,
-        data_limit_bytes=data_limit,
-    )
+    try:
+        marzban = MarzbanClient(settings)
+        data_limit = int(sub.traffic_limit_gb * 1024**3) if sub.traffic_limit_gb else 0
+        status = "active" if sub.status in {SubscriptionStatus.active, SubscriptionStatus.trial} else "disabled"
+        await marzban.modify_user(
+            sub.marzban_username,
+            expire_ts=to_unix(sub.ends_at),
+            status=status,
+            data_limit_bytes=data_limit,
+        )
+    except Exception as exc:  # noqa: BLE001 — casino must not 500 if Marzban is down
+        log.warning("casino_marzban_sync_failed", username=sub.marzban_username, error=str(exc))
 
 
 async def spin_casino(

@@ -79,21 +79,16 @@ services:
   web:
     build:
       context: ./apps/web
-      target: deps
     env_file: .env
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_BRAND_NAME: ${BRAND_NAME:-Enigma_PN}
       NEXT_PUBLIC_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-enigmapnbot}
       NEXT_PUBLIC_DOMAIN: ${DOMAIN:-bigwinzone.ru}
     ports:
       - "3000:3000"
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
     depends_on:
       - api
-    command: sh -c "npm install && npm run dev"
 
   nginx:
     image: nginx:1.27-alpine

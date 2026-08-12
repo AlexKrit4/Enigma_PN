@@ -409,11 +409,11 @@ async def cmd_mysub(message: Message, state: FSMContext) -> None:
     await message.answer(
         format_subscription_card(sub, brand=settings.brand_name),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub) or main_menu(settings.miniapp_url),
+        reply_markup=main_menu(settings.miniapp_url),
     )
-    if _sub_keyboard(sub):
-        # refresh reply keyboard with Mini App button
-        await message.answer("Меню:", reply_markup=main_menu(settings.miniapp_url))
+    kb = _sub_keyboard(sub)
+    if kb:
+        await message.answer("Готово к подключению:", reply_markup=kb)
 
 
 @router.callback_query(F.data == "show_sub_url")

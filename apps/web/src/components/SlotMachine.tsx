@@ -67,9 +67,10 @@ function visibleTriple(strip: string[], offset: number): [string, string, string
   ];
 }
 
-/** Soft decelerate: fast start, gentle stop (no slam). */
-function easeOutSoft(t: number) {
-  return 1 - Math.pow(1 - t, 1.55);
+/** Smooth cruise: no hard kick at start, soft settle at end. */
+function easeSmooth(t: number) {
+  // smootherstep — zero velocity at both ends
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 export function SlotMachine({
@@ -162,15 +163,13 @@ export function SlotMachine({
       offsetsRef.current = start;
 
       const t0 = performance.now();
-      const speeds = [5.4, 6.0, 6.6]; // cells/sec after ease-in
+      const speeds = [5.2, 5.8, 6.4]; // cells/sec — constant, no kickstart
 
       const drift = (now: number) => {
         if (cancelled) return;
         const elapsed = (now - t0) / 1000;
-        const easeIn = Math.min(1, elapsed / 0.14);
-        const accel = easeIn * easeIn;
         const next = [0, 1, 2].map((i) => {
-          const traveled = elapsed * speeds[i] * accel * CELL;
+          const traveled = elapsed * speeds[i] * CELL;
           // leave headroom so we don't hit the top before the book arrives
           return Math.max(start[i] - traveled, CELL * 2);
         });
@@ -225,7 +224,7 @@ export function SlotMachine({
 
       for (let i = 0; i < 3; i++) {
         const t = Math.min(1, Math.max(0, (now - landStart) / STOP_MS[i]));
-        next[i] = from[i] + (to[i] - from[i]) * easeOutSoft(t);
+        next[i] = from[i] + (to[i] - from[i]) * easeSmooth(t);
         if (t >= 1) {
           next[i] = to[i];
           if (!colDone[i]) {
@@ -307,7 +306,7 @@ export function SlotMachine({
         {busy ? "Крутим…" : "Крутить (−1 день)"}
       </button>
 
-      {message ? <p className="ma-casino-msg">{message}</p> : null}
+      {message && showWin ? <p className="ma-casino-msg">{message}</p> : null}
       <p className="ma-muted tiny">
         RTP 96% · макс. выигрыш 30 дней · осталось: <b>{daysLeft ?? "—"}</b>
       </p>

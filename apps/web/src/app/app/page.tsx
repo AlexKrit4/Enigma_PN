@@ -114,6 +114,8 @@ export default function MiniAppPage() {
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
   const [resultGrid, setResultGrid] = useState<string[] | null>(null);
   const pendingBookRef = useRef<string[] | null>(null);
+  const pendingMsgRef = useRef("");
+  const pendingWinDaysRef = useRef(0);
   const [winLines, setWinLines] = useState<number[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; label?: string }>>([]);
@@ -264,6 +266,8 @@ export default function MiniAppPage() {
     setSpinning(true);
     setResultGrid(null);
     pendingBookRef.current = null;
+    pendingMsgRef.current = "";
+    pendingWinDaysRef.current = 0;
     setCasinoMsg("");
     setWinLines([]);
     try {
@@ -275,16 +279,18 @@ export default function MiniAppPage() {
         message: string;
         days_left: number;
       }>("/api/v1/miniapp/casino/spin", token);
-      // Keep spinning until reels land on this book (onSettled)
+      // Keep spinning until reels land; show win text only after settle
       pendingBookRef.current = res.grid;
+      pendingMsgRef.current = res.message || "";
+      pendingWinDaysRef.current = res.win_days || 0;
       setResultGrid(res.grid);
       setWinLines(res.winning_lines || []);
-      setCasinoMsg(res.message);
-      tg?.HapticFeedback?.impactOccurred(res.win_days > 0 ? "heavy" : "light");
       await refreshMe(token);
     } catch (e) {
       setCasinoMsg(e instanceof Error ? e.message : String(e));
       pendingBookRef.current = null;
+      pendingMsgRef.current = "";
+      pendingWinDaysRef.current = 0;
       setResultGrid(null);
       setSpinning(false);
     }
@@ -295,7 +301,11 @@ export default function MiniAppPage() {
     if (book?.length === 9) {
       setGrid(book);
     }
+    setCasinoMsg(pendingMsgRef.current);
+    tg?.HapticFeedback?.impactOccurred(pendingWinDaysRef.current > 0 ? "heavy" : "light");
     pendingBookRef.current = null;
+    pendingMsgRef.current = "";
+    pendingWinDaysRef.current = 0;
     setResultGrid(null);
     setSpinning(false);
   }

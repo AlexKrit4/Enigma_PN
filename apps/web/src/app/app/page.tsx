@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SlotMachine } from "../../components/SlotMachine";
 import {
   apiGet,
@@ -112,6 +112,8 @@ export default function MiniAppPage() {
   const [casinoHint, setCasinoHint] = useState("");
   const [paytable, setPaytable] = useState<Array<{ symbol: string; pay: number }>>([]);
   const [grid, setGrid] = useState<string[]>(Array(9).fill("❓"));
+  const [resultGrid, setResultGrid] = useState<string[] | null>(null);
+  const pendingBookRef = useRef<string[] | null>(null);
   const [winLines, setWinLines] = useState<number[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [devices, setDevices] = useState<Array<{ id: string; label?: string }>>([]);
@@ -260,6 +262,8 @@ export default function MiniAppPage() {
   async function spin() {
     if (!token || spinning) return;
     setSpinning(true);
+    setResultGrid(null);
+    pendingBookRef.current = null;
     setCasinoMsg("");
     setWinLines([]);
     try {
@@ -271,16 +275,29 @@ export default function MiniAppPage() {
         message: string;
         days_left: number;
       }>("/api/v1/miniapp/casino/spin", token);
-      setGrid(res.grid);
+      // Keep spinning until reels land on this book (onSettled)
+      pendingBookRef.current = res.grid;
+      setResultGrid(res.grid);
       setWinLines(res.winning_lines || []);
       setCasinoMsg(res.message);
       tg?.HapticFeedback?.impactOccurred(res.win_days > 0 ? "heavy" : "light");
       await refreshMe(token);
     } catch (e) {
       setCasinoMsg(e instanceof Error ? e.message : String(e));
-    } finally {
+      pendingBookRef.current = null;
+      setResultGrid(null);
       setSpinning(false);
     }
+  }
+
+  function onSpinSettled() {
+    const book = pendingBookRef.current;
+    if (book?.length === 9) {
+      setGrid(book);
+    }
+    pendingBookRef.current = null;
+    setResultGrid(null);
+    setSpinning(false);
   }
 
   if (loading) {
@@ -410,16 +427,17 @@ export default function MiniAppPage() {
           <div className="ma-card">
             <h2>Слот 3×3</h2>
             <p className="ma-muted">
-              10 000 книг · 5 линий · ставка <b>1 день</b> (фикс.) · RTP 96% · макс. 30 дней.
-              Только безлимитный трафик.
+              Ставка 1 день · RTP 96% · макс. выигрыш 30 дней. Только безлимитный трафик.
             </p>
             {!casinoEligible ? <p className="ma-alert soft">{casinoHint || "Недоступно"}</p> : null}
             <SlotMachine
               grid={grid}
+              resultGrid={resultGrid}
               winningLines={winLines}
               spinning={spinning}
               disabled={!casinoEligible}
               onSpin={spin}
+              onSettled={onSpinSettled}
               message={casinoMsg}
               daysLeft={me?.subscription?.days_left}
               paytable={paytable}

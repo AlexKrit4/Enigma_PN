@@ -105,5 +105,16 @@ services:
       - api
       - web
 
+  # Optional shared MTProto (mtg). On prod VPS :443 is HAProxy — use 8443.
+  # Start: docker compose --profile mtg up -d mtg
+  mtg:
+    profiles: ["mtg"]
+    image: nineseconds/mtg:2
+    restart: unless-stopped
+    volumes:
+      - ./infra/mtg/config.toml:/config.toml:ro
+    ports:
+      - "${MTPROTO_PORT:-8443}:3128"
+
 volumes:
   postgres_data:

@@ -17,6 +17,7 @@ class BotSettings(BaseSettings):
     brand_name: str = "Enigma_PN"
     support_telegram: str = "@alexkr1t"
     domain: str = "bigwinzone.ru"
+    miniapp_url: str = "https://bigwinzone.ru/app"
 
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod

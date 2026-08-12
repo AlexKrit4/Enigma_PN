@@ -121,7 +121,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     text = intro + "\n" + trial_note + format_subscription_card(
         sub, brand=settings.brand_name
     )
-    await message.answer(text, reply_markup=main_menu(), parse_mode="HTML")
+    await message.answer(text, reply_markup=main_menu(settings.miniapp_url), parse_mode="HTML")
     kb = _sub_keyboard(sub)
     if kb:
         await message.answer(
@@ -409,8 +409,11 @@ async def cmd_mysub(message: Message, state: FSMContext) -> None:
     await message.answer(
         format_subscription_card(sub, brand=settings.brand_name),
         parse_mode="HTML",
-        reply_markup=_sub_keyboard(sub),
+        reply_markup=_sub_keyboard(sub) or main_menu(settings.miniapp_url),
     )
+    if _sub_keyboard(sub):
+        # refresh reply keyboard with Mini App button
+        await message.answer("Меню:", reply_markup=main_menu(settings.miniapp_url))
 
 
 @router.callback_query(F.data == "show_sub_url")
@@ -497,6 +500,7 @@ async def cmd_help(message: Message, state: FSMContext) -> None:
         "3. Нажмите «🚀 Открыть в Happ» — подписка добавится сама\n"
         "4. В Happ обновите подписку и включите сервер Finland\n\n"
         "Тарифы: ограниченный / вечный / свой.\n"
+        "Кабинет и казино дней: кнопка «🎰 Кабинет».\n"
         f"Сайт: https://{get_settings().domain}"
     )
     await message.answer(text)

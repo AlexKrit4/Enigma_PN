@@ -1,10 +1,12 @@
 from app.db import Base
 from app.models.entities import (
+    CasinoSpin,
     Order,
     Payment,
     Plan,
     PromoCode,
     PromoRedemption,
+    ProxyAccess,
     Subscription,
     SubscriptionDevice,
     User,
@@ -22,4 +24,6 @@ __all__ = [
     "VpnNode",
     "PromoCode",
     "PromoRedemption",
+    "ProxyAccess",
+    "CasinoSpin",
 ]

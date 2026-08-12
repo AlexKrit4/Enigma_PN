@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     mtproto_secret: str = ""  # ee + key + hex(MTPROTO_FAKE_TLS_DOMAIN)
     mtproto_fake_tls_domain: str = "www.google.com"
 
+    # Telegram Mini App + casino (subscription days, unlimited traffic only)
+    miniapp_url: str = "https://bigwinzone.ru/app"
+    casino_enabled: bool = True
+
     @field_validator("admin_telegram_ids", mode="before")
     @classmethod
     def parse_admin_ids(cls, value: Any) -> list[int]:

@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import MenuButtonWebApp, WebAppInfo
 
 from bot.config import get_settings
 from bot.handlers import admin as admin_handlers
@@ -29,6 +30,16 @@ async def main() -> None:
     dp.include_router(start_handlers.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
+    if settings.miniapp_url:
+        try:
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="Кабинет",
+                    web_app=WebAppInfo(url=settings.miniapp_url),
+                )
+            )
+        except Exception:
+            logging.exception("Failed to set Mini App menu button")
     logging.info("Bot starting as @%s", settings.telegram_bot_username)
     await dp.start_polling(bot)
 

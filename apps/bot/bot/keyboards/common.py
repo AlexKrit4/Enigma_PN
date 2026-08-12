@@ -3,17 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from html import escape
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
 
-def main_menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🛒 Тарифы"), KeyboardButton(text="📱 Моя подписка")],
-            [KeyboardButton(text="❓ Помощь"), KeyboardButton(text="💬 Поддержка")],
-        ],
-        resize_keyboard=True,
-    )
+def main_menu(miniapp_url: str | None = None) -> ReplyKeyboardMarkup:
+    row2 = [KeyboardButton(text="❓ Помощь"), KeyboardButton(text="💬 Поддержка")]
+    rows = [
+        [KeyboardButton(text="🛒 Тарифы"), KeyboardButton(text="📱 Моя подписка")],
+        row2,
+    ]
+    if miniapp_url:
+        rows.insert(1, [KeyboardButton(text="🎰 Кабинет", web_app=WebAppInfo(url=miniapp_url))])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def tariff_type_keyboard() -> InlineKeyboardMarkup:

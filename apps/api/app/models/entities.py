@@ -234,3 +234,22 @@ class ProxyAccess(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="proxy_access")
+
+
+class CasinoSpin(Base):
+    """Ledger of Mini App slot spins paid in subscription days."""
+
+    __tablename__ = "casino_spins"
+    __table_args__ = (Index("ix_casino_spins_user_created", "user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subscriptions.id"), index=True
+    )
+    bet_days: Mapped[int] = mapped_column(Integer, default=1)
+    win_days: Mapped[int] = mapped_column(Integer, default=0)
+    net_days: Mapped[int] = mapped_column(Integer, default=-1)
+    grid: Mapped[list] = mapped_column(JSONB, default=list)
+    winning_lines: Mapped[list] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

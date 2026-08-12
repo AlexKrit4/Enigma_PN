@@ -123,6 +123,7 @@ export default function MiniAppPage() {
   const [inBonus, setInBonus] = useState(false);
   const [multiplier, setMultiplier] = useState(1);
   const [bonusSpinsLeft, setBonusSpinsLeft] = useState<number | null>(null);
+  const [bonusAccum, setBonusAccum] = useState(0);
   const [bonusIntro, setBonusIntro] = useState(false);
   const [bonusEndTotal, setBonusEndTotal] = useState<number | null>(null);
   const [devices, setDevices] = useState<Array<{ id: string; label?: string }>>([]);
@@ -362,8 +363,10 @@ export default function MiniAppPage() {
 
     setInBonus(true);
     setMultiplier(1);
+    setBonusAccum(0);
     setCasinoMsg("");
 
+    let accumulated = 0;
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
       setBonusSpinsLeft(rounds.length - i);
@@ -381,14 +384,23 @@ export default function MiniAppPage() {
       setMultiplier(round.multiplier);
       setResultGrid(null);
       setSpinning(false);
+
+      accumulated += round.win_days || 0;
+      setBonusAccum(accumulated);
+
       if (round.win_days > 0) {
-        setCasinoMsg(`+${round.win_days} дн. · ${round.multiplier}×`);
+        setCasinoMsg(
+          `Спин: +${round.win_days} дн. (${round.multiplier}×) · Итого: +${accumulated} дн.`
+        );
         tg?.HapticFeedback?.impactOccurred("medium");
       } else if (round.x_hit) {
-        setCasinoMsg(`Х! Множитель ${round.multiplier}×`);
+        setCasinoMsg(`Х! Множитель ${round.multiplier}× · Итого: +${accumulated} дн.`);
         tg?.HapticFeedback?.impactOccurred("light");
+      } else {
+        setCasinoMsg(`Без выигрыша · Итого: +${accumulated} дн.`);
       }
-      await new Promise((r) => setTimeout(r, 450));
+      // Pause so the player can read the result before the next free spin
+      await new Promise((r) => setTimeout(r, 3000));
     }
 
     setBonusSpinsLeft(0);
@@ -405,6 +417,7 @@ export default function MiniAppPage() {
     setBonusEndTotal(null);
     setMultiplier(1);
     setBonusSpinsLeft(null);
+    setBonusAccum(0);
     setCasinoMsg(total > 0 ? `Бонус: +${total} дн.` : "Бонус без выигрыша");
     pendingWinDaysRef.current = 0;
   }
@@ -554,6 +567,7 @@ export default function MiniAppPage() {
               inBonus={inBonus}
               multiplier={multiplier}
               bonusSpinsLeft={bonusSpinsLeft}
+              bonusTotalDays={inBonus || bonusSpinsLeft != null ? bonusAccum : null}
             />
           </div>
         </section>

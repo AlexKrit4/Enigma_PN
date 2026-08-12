@@ -17,12 +17,14 @@ const PAYLINES = [
 const CELL = 78;
 const VISIBLE = 3;
 const GAP = 8; // must match .slot-window gap
-/** Random symbols between result (top) and current symbols (bottom). */
-const SPIN_PAD = [8, 12, 16];
-/** Staggered stop: column 1 → 2 → 3. */
-const STOP_MS = [480, 720, 960];
-/** Match land average speed: pad_cells / (stop_ms/1000) ≈ 16.67 cells/s */
-const DRIFT_SPEED = SPIN_PAD.map((pad, i) => pad / (STOP_MS[i] / 1000));
+/** Constant spin speed (cells/sec) — no accel / no ease. */
+const SPIN_SPEED = 16;
+/**
+ * Different travel distance → reels stop 1→2→3 at the SAME linear speed.
+ * stop_ms = pad / SPIN_SPEED * 1000
+ */
+const SPIN_PAD = [10, 14, 18];
+const SPEED_PX = SPIN_SPEED * CELL;
 
 export type BonusRoundView = {
   grid: string[];
@@ -48,6 +50,8 @@ type Props = {
   inBonus?: boolean;
   multiplier?: number;
   bonusSpinsLeft?: number | null;
+  /** Cumulative days won during the current bonus game. */
+  bonusTotalDays?: number | null;
   spinLabel?: string;
 };
 
@@ -82,10 +86,6 @@ function visibleTriple(strip: string[], offset: number): [string, string, string
   ];
 }
 
-function easeSmooth(t: number) {
-  return t * t * t * (t * (t * 6 - 15) + 10);
-}
-
 function cellCenter(idx: number, colW: number): { x: number; y: number } {
   const col = idx % 3;
   const row = Math.floor(idx / 3);
@@ -109,6 +109,7 @@ export function SlotMachine({
   inBonus,
   multiplier = 1,
   bonusSpinsLeft,
+  bonusTotalDays,
   spinLabel,
 }: Props) {
   const pool = useMemo(
@@ -184,9 +185,9 @@ export function SlotMachine({
         colOf(gridRef.current, 2),
       ];
       const pending = [
-        buildStripDown(lead[0], null, 36, symPool),
+        buildStripDown(lead[0], null, 40, symPool),
         buildStripDown(lead[1], null, 40, symPool),
-        buildStripDown(lead[2], null, 44, symPool),
+        buildStripDown(lead[2], null, 40, symPool),
       ];
       const start: [number, number, number] = [
         maxY(pending[0]),
@@ -202,10 +203,8 @@ export function SlotMachine({
       const drift = (now: number) => {
         if (cancelled) return;
         const elapsed = (now - t0) / 1000;
-        const next = [0, 1, 2].map((i) => {
-          const traveled = elapsed * DRIFT_SPEED[i] * CELL;
-          return Math.max(start[i] - traveled, CELL * 2);
-        });
+        const traveled = elapsed * SPEED_PX;
+        const next = [0, 1, 2].map((i) => Math.max(start[i] - traveled, CELL * 2));
         offsetsRef.current = next;
         setOffsets(next);
         raf = requestAnimationFrame(drift);
@@ -250,13 +249,14 @@ export function SlotMachine({
 
     const tick = (now: number) => {
       if (cancelled) return;
+      const elapsed = (now - landStart) / 1000;
+      const traveled = elapsed * SPEED_PX;
       const next: [number, number, number] = [0, 0, 0];
       let allDone = true;
 
       for (let i = 0; i < 3; i++) {
-        const t = Math.min(1, Math.max(0, (now - landStart) / STOP_MS[i]));
-        next[i] = from[i] + (to[i] - from[i]) * easeSmooth(t);
-        if (t >= 1) {
+        const y = from[i] - traveled;
+        if (y <= to[i]) {
           next[i] = to[i];
           if (!colDone[i]) {
             colDone[i] = true;
@@ -267,6 +267,7 @@ export function SlotMachine({
             });
           }
         } else {
+          next[i] = y;
           allDone = false;
         }
       }
@@ -314,9 +315,10 @@ export function SlotMachine({
       {inBonus ? (
         <div className="slot-bonus-bar">
           <span className="slot-mult">{multiplier}×</span>
-          {bonusSpinsLeft != null ? (
-            <span className="slot-bonus-left">Осталось спинов: {bonusSpinsLeft}</span>
-          ) : null}
+          <span className="slot-bonus-left">
+            {bonusSpinsLeft != null ? `Осталось: ${bonusSpinsLeft}` : "Бонус"}
+            {bonusTotalDays != null ? ` · Итого: +${bonusTotalDays} дн.` : ""}
+          </span>
         </div>
       ) : null}
 

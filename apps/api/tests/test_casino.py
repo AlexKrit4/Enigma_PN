@@ -68,6 +68,16 @@ def test_regular_books_no_trigger_or_mult() -> None:
         assert sum(1 for c in book.grid if c == BONUS_SYMBOL) < 3
         assert MULT_SYMBOL not in book.grid
         assert book.win_days <= MAX_WIN_DAYS
+        for col in range(3):
+            n = sum(1 for row in range(3) if book.grid[row * 3 + col] == BONUS_SYMBOL)
+            assert n <= 1
+
+
+def test_bonus_trigger_one_scatter_per_reel() -> None:
+    for book in (b for b in get_books() if b.is_bonus):
+        for col in range(3):
+            n = sum(1 for row in range(3) if book.grid[row * 3 + col] == BONUS_SYMBOL)
+            assert n == 1
 
 
 def test_books_grids_consistent() -> None:

@@ -49,7 +49,7 @@ BONUS_ROUNDS = 7
 BOOK_COUNT = 20_000
 BONUS_BOOK_COUNT = 200  # 1 in 100
 TARGET_RETURN_DAYS = 19_200  # RTP 96% over full book cycle
-BOOK_SEED = 20260812_02
+BOOK_SEED = 20260812_03
 
 # Regular (non-bonus) book win amounts — sum = 17010 across 19800 books
 WIN_BOOK_COUNTS: tuple[tuple[int, int], ...] = (
@@ -133,13 +133,39 @@ def _scrub_pay_lines(cells: list[str], rng: Random, protect: set[int] | None = N
                     break
 
 
-def _place_scatters(cells: list[str], count: int, rng: Random) -> None:
+def _place_scatters(
+    cells: list[str],
+    count: int,
+    rng: Random,
+    *,
+    forbid: set[int] | None = None,
+) -> None:
+    """Place scatters with at most one «В» per reel (column)."""
     if count <= 0:
         return
-    positions = list(range(9))
-    rng.shuffle(positions)
-    for pos in positions[:count]:
-        cells[pos] = BONUS_SYMBOL
+    forbid = forbid or set()
+    cols = [0, 1, 2]
+    rng.shuffle(cols)
+    placed = 0
+    for col in cols:
+        if placed >= count:
+            break
+        # Already has a scatter on this reel — skip
+        if any(cells[row * 3 + col] == BONUS_SYMBOL for row in range(3)):
+            continue
+        rows = [row for row in range(3) if (row * 3 + col) not in forbid]
+        if not rows:
+            continue
+        cells[rng.choice(rows) * 3 + col] = BONUS_SYMBOL
+        placed += 1
+
+
+def _scatters_per_reel_ok(grid: list[str] | tuple[str, ...]) -> bool:
+    for col in range(3):
+        n = sum(1 for row in range(3) if grid[row * 3 + col] == BONUS_SYMBOL)
+        if n > 1:
+            return False
+    return True
 
 
 def _count_symbol(grid: list[str] | tuple[str, ...], symbol: str) -> int:
@@ -149,11 +175,13 @@ def _count_symbol(grid: list[str] | tuple[str, ...], symbol: str) -> int:
 def _fill_loss_grid(rng: Random) -> tuple[list[str], list[int]]:
     cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
     _scrub_pay_lines(cells, rng)
-    # Sometimes show 1–2 bonus scatters (never 3)
+    # 0–2 scatters, never 3, max one per reel
     scatter_n = rng.choice([0, 0, 0, 0, 1, 1, 2])
     if scatter_n:
         _place_scatters(cells, scatter_n, rng)
         _scrub_pay_lines(cells, rng)
+        # Scrub must not stack scatters on one reel
+        assert _scatters_per_reel_ok(cells)
     return cells, []
 
 
@@ -169,35 +197,42 @@ def _fill_win_grid(payout: int, rng: Random) -> tuple[list[str], list[int]]:
     winning_lines = [line_idx]
     _scrub_pay_lines(cells, rng, protect={a, b, c})
 
-    # Optional 1–2 scatters off the winning line
-    free = [i for i in range(9) if i not in (a, b, c)]
+    # Optional 1–2 scatters off the winning line, still ≤1 per reel
     scatter_n = rng.choice([0, 0, 0, 1, 1, 2])
-    if scatter_n and free:
-        rng.shuffle(free)
-        for pos in free[: min(scatter_n, len(free))]:
-            cells[pos] = BONUS_SYMBOL
+    if scatter_n:
+        _place_scatters(cells, scatter_n, rng, forbid={a, b, c})
         _scrub_pay_lines(cells, rng, protect={a, b, c})
+        assert _scatters_per_reel_ok(cells)
     return cells, winning_lines
 
 
 def _fill_bonus_trigger(rng: Random) -> tuple[list[str], list[int]]:
-    """Trigger spin: exactly 3× В, no Х, no paying lines."""
+    """Trigger spin: exactly one «В» on each reel (3 total), no Х, no paying lines."""
     cells = [rng.choice(PAY_SYMBOLS) for _ in range(9)]
-    _place_scatters(cells, 3, rng)
+    for col in range(3):
+        row = rng.randrange(3)
+        cells[row * 3 + col] = BONUS_SYMBOL
     _scrub_pay_lines(cells, rng)
-    # Ensure still exactly 3 scatters after scrub
-    while _count_symbol(cells, BONUS_SYMBOL) < 3:
-        for i in range(9):
-            if cells[i] != BONUS_SYMBOL:
-                cells[i] = BONUS_SYMBOL
-                break
-    while _count_symbol(cells, BONUS_SYMBOL) > 3:
-        for i in range(9):
-            if cells[i] == BONUS_SYMBOL:
-                cells[i] = rng.choice(PAY_SYMBOLS)
-                break
-        _scrub_pay_lines(cells, rng)
+    # Restore exactly one scatter per reel after scrub
+    for col in range(3):
+        idxs = [row * 3 + col for row in range(3)]
+        have = [i for i in idxs if cells[i] == BONUS_SYMBOL]
+        if len(have) == 1:
+            continue
+        for i in have:
+            cells[i] = rng.choice(PAY_SYMBOLS)
+        cells[rng.choice(idxs)] = BONUS_SYMBOL
+    _scrub_pay_lines(cells, rng, protect={i for i, s in enumerate(cells) if s == BONUS_SYMBOL})
+    # Final enforce
+    for col in range(3):
+        idxs = [row * 3 + col for row in range(3)]
+        have = [i for i in idxs if cells[i] == BONUS_SYMBOL]
+        if len(have) != 1:
+            for i in idxs:
+                cells[i] = rng.choice(PAY_SYMBOLS) if cells[i] == BONUS_SYMBOL else cells[i]
+            cells[rng.choice(idxs)] = BONUS_SYMBOL
     assert _count_symbol(cells, BONUS_SYMBOL) == 3
+    assert _scatters_per_reel_ok(cells)
     assert MULT_SYMBOL not in cells
     return cells, []
 
@@ -393,6 +428,7 @@ def get_books() -> tuple[Book, ...]:
     assert sum(1 for b in books if b.is_bonus) == BONUS_BOOK_COUNT
     assert max((b.win_days for b in books if not b.is_bonus), default=0) <= MAX_WIN_DAYS
     for b in books:
+        assert _scatters_per_reel_ok(b.grid)
         if b.is_bonus:
             assert len(b.bonus_rounds) == BONUS_ROUNDS
             assert _count_symbol(b.grid, BONUS_SYMBOL) == 3

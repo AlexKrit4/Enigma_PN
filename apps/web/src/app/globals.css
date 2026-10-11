@@ -46,3 +46,30 @@ a {
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
 }
+
+/* --- website UI kit --- */
+@layer components {
+  .card {
+    @apply rounded-3xl border border-white/10 bg-white/[0.035] shadow-soft backdrop-blur-sm;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-base font-semibold text-ink transition hover:bg-[#25bf8b] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full border border-white/15 bg-white/[0.03] px-6 py-3 text-base font-medium text-mist transition hover:border-white/30 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .nav-link {
+    @apply inline-flex rounded-full px-3 py-2 text-mist/75 transition hover:text-mist;
+  }
+  .input {
+    @apply block w-full rounded-xl border border-white/10 bg-ink/60 px-4 py-3 text-base text-mist outline-none transition placeholder:text-mist/35 focus:border-accent/60 focus:ring-2 focus:ring-accent/20;
+  }
+  .stepper {
+    @apply grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-white/[0.04] text-xl text-mist transition hover:border-white/35 disabled:cursor-not-allowed disabled:opacity-35;
+  }
+  .bg-hero {
+    background:
+      radial-gradient(700px 400px at 70% 0%, rgba(31, 169, 122, 0.18), transparent 60%),
+      radial-gradient(500px 300px at 0% 60%, rgba(196, 163, 90, 0.1), transparent 60%);
+  }
+}

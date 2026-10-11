@@ -73,6 +73,17 @@ PLANS = [
         "price_rub": "800.00",
         "sort_order": 60,
     },
+    # Тариф сайта — не показывается в боте (группа «сайт» фильтруется на стороне бота)
+    {
+        "slug": "site-bypass",
+        "name": "Обход белых списков",
+        "group_name": "сайт",
+        "duration_days": 30,
+        "traffic_gb": None,
+        "device_limit": 5,
+        "price_rub": "200.00",
+        "sort_order": 100,
+    },
 ]
 
 ACTIVE_SLUGS = {p["slug"] for p in PLANS}

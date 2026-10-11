@@ -1,165 +1,126 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import Link from "next/link";
+import Footer from "@/components/site/Footer";
+import Header from "@/components/site/Header";
+import PriceCalculator from "@/components/site/PriceCalculator";
+
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Enigma_PN";
-const BOT = process.env.NEXT_PUBLIC_BOT_USERNAME || "enigmapnbot";
-const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN || "bigwinzone.ru";
 
-type Plan = {
-  id: string;
-  slug: string;
-  name: string;
-  group_name: string;
-  duration_days: number;
-  traffic_gb: number | null;
-  device_limit: number;
-  price_rub: string;
-};
+const steps = [
+  { n: "01", title: "Зарегистрируйтесь", text: "Почта и пароль. Сразу получите один день доступа бесплатно — проверьте, что всё работает именно у вас." },
+  { n: "02", title: "Установите Happ", text: "Бесплатное приложение для Android, iPhone, Windows, macOS и телевизоров. Ссылки — в личном кабинете." },
+  { n: "03", title: "Нажмите «Добавить в Happ»", text: "Подписка добавится сама. Выбираете сервер, включаете — готово. Никаких ручных настроек." },
+];
 
-async function getPlans(): Promise<Plan[]> {
-  try {
-    const res = await fetch(`${API_URL}/api/v1/plans`, { next: { revalidate: 60 } });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
+const faq = [
+  { q: "Что такое «белые списки» и почему другие VPN не работают?", a: "На некоторых сетях провайдер пропускает трафик только к разрешённым российским сайтам. Обычные VPN-серверы за рубежом туда не входят, поэтому соединение просто не устанавливается. Наш вход расположен в России и выглядит для провайдера как обычный российский сайт, поэтому проходит." },
+  { q: "Будет ли работать на мобильном интернете и домашнем Wi-Fi?", a: "Да. В подписке два подключения: обычное через Финляндию и «Обход» для сетей с ограничениями. Если одно не подходит для вашей сети — переключитесь на второе прямо в Happ." },
+  { q: "Как считаются устройства?", a: "Устройство — это телефон, компьютер или телевизор, на котором добавлена подписка. В тариф входит 5 устройств, каждое следующее — 50 ₽ в месяц. Список устройств и кнопка «отключить» есть в кабинете." },
+  { q: "Есть ограничение трафика или скорости?", a: "Нет. Трафик безлимитный, скорость ограничена только вашим интернетом." },
+  { q: "Как оплатить?", a: "Через ЮMoney: банковской картой или кошельком. Подписка активируется автоматически в течение минуты после оплаты." },
+];
 
-export default async function HomePage() {
-  const plans = await getPlans();
-  const groups = Array.from(new Set(plans.map((p) => p.group_name)));
-
+export default function HomePage() {
   return (
-    <main className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 grid-noise opacity-40" />
-      <div className="pointer-events-none absolute -right-24 top-24 h-80 w-80 animate-glow rounded-full bg-accent/20 blur-3xl" />
-      <div className="pointer-events-none absolute left-10 top-64 h-56 w-56 animate-drift rounded-full bg-copper/10 blur-3xl" />
-
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <div className="font-display text-2xl tracking-tight text-mist">{BRAND}</div>
-        <nav className="flex items-center gap-4 text-sm text-mist/80">
-          <a href="#pricing" className="hover:text-mist">
-            Тарифы
-          </a>
-          <a href="/legal" className="hover:text-mist">
-            Оферта
-          </a>
-          <a
-            href={`https://t.me/${BOT}`}
-            className="rounded-full bg-accent px-4 py-2 font-semibold text-ink transition hover:bg-accent2"
-          >
-            Открыть бота
-          </a>
-        </nav>
-      </header>
-
-      <section className="relative z-10 mx-auto flex min-h-[78vh] w-full max-w-6xl flex-col justify-center px-6 pb-20 pt-8">
-        <p className="animate-rise mb-4 text-sm uppercase tracking-[0.22em] text-accent">VPN · Happ · {DOMAIN}</p>
-        <h1 className="animate-rise font-display max-w-3xl text-5xl leading-[1.05] text-mist md:text-7xl" style={{ animationDelay: "0.08s" }}>
-          {BRAND}
-        </h1>
-        <p className="animate-rise mt-6 max-w-xl text-lg text-mist/75 md:text-xl" style={{ animationDelay: "0.16s" }}>
-          Стабильный доступ через Happ. Купите подписку в Telegram — получите ссылку и подключитесь за минуту.
-        </p>
-        <div className="animate-rise mt-10 flex flex-wrap gap-4" style={{ animationDelay: "0.24s" }}>
-          <a
-            href={`https://t.me/${BOT}`}
-            className="rounded-full bg-mist px-6 py-3 font-semibold text-ink transition hover:bg-white"
-          >
-            Начать в Telegram
-          </a>
-          <a
-            href="#pricing"
-            className="rounded-full border border-mist/25 px-6 py-3 font-semibold text-mist transition hover:border-mist/60"
-          >
-            Смотреть тарифы
-          </a>
-        </div>
-      </section>
-
-      <section id="pricing" className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
-        <h2 className="font-display text-3xl text-mist md:text-4xl">Тарифы</h2>
-        <p className="mt-3 max-w-2xl text-mist/70">
-          Ограниченный трафик, вечный трафик или свой тариф. Оплата в Telegram-боте через ЮMoney.
-        </p>
-
-        {groups.length === 0 ? (
-          <p className="mt-10 text-mist/60">Тарифы появятся после запуска API.</p>
-        ) : (
-          groups.map((group) => (
-            <div key={group} className="mt-12">
-              <h3 className="mb-6 text-sm uppercase tracking-[0.18em] text-copper">{group}</h3>
-              <div className="grid gap-6 md:grid-cols-3">
-                {plans
-                  .filter((p) => p.group_name === group)
-                  .map((plan) => (
-                    <article
-                      key={plan.id}
-                      className="rounded-2xl border border-mist/10 bg-white/[0.03] p-6 backdrop-blur transition hover:border-accent/40 hover:bg-white/[0.05]"
-                    >
-                      <div className="font-display text-2xl text-mist">{plan.name}</div>
-                      <div className="mt-4 font-display text-4xl text-accent">{plan.price_rub} ₽</div>
-                      <ul className="mt-6 space-y-2 text-sm text-mist/75">
-                        <li>{plan.duration_days} дней</li>
-                        <li>{plan.traffic_gb == null ? "вечный трафик" : `${plan.traffic_gb} ГБ трафика`}</li>
-                        <li>до {plan.device_limit} устройств</li>
-                        <li>клиент Happ</li>
-                      </ul>
-                      <a
-                        href={`https://t.me/${BOT}`}
-                        className="mt-8 inline-flex rounded-full bg-accent/90 px-4 py-2 text-sm font-semibold text-ink hover:bg-accent"
-                      >
-                        Купить в боте
-                      </a>
-                    </article>
-                  ))}
+    <>
+      <Header />
+      <main>
+        <section className="relative overflow-hidden">
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-hero" />
+          <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:pt-24">
+            <div className="animate-rise">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-mist/80">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Работает там, где остальные молчат
               </div>
+              <h1 className="font-display mt-6 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
+                VPN, который проходит через белые списки
+              </h1>
+              <p className="mt-6 max-w-xl text-lg leading-relaxed text-mist/75">
+                {BRAND} подключается даже в сетях, где провайдер разрешает только российские сайты. Один тариф, безлимитный трафик, пять устройств. Настройка — одно нажатие в приложении Happ.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link href="/register" className="btn-primary">Попробовать день бесплатно</Link>
+                <Link href="#price" className="btn-ghost">Смотреть цену</Link>
+              </div>
+              <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/10 pt-8">
+                <div><dt className="text-xs text-mist/55">Трафик</dt><dd className="font-display mt-1 text-2xl">∞</dd></div>
+                <div><dt className="text-xs text-mist/55">Устройств</dt><dd className="font-display mt-1 text-2xl">5+</dd></div>
+                <div><dt className="text-xs text-mist/55">Цена</dt><dd className="font-display mt-1 text-2xl">от 167 ₽</dd></div>
+              </dl>
             </div>
-          ))
-        )}
-
-        <div className="mt-12 rounded-2xl border border-mist/10 bg-white/[0.03] p-6">
-          <div className="font-display text-2xl text-mist">Свой тариф</div>
-          <p className="mt-3 text-mist/70">
-            Соберите сами в боте: 2 ₽ за ГБ, 1 ₽ за день, 25 ₽ за устройство. Вечный трафик в своём тарифе недоступен.
-          </p>
-          <a
-            href={`https://t.me/${BOT}`}
-            className="mt-6 inline-flex rounded-full bg-mist px-4 py-2 text-sm font-semibold text-ink hover:bg-white"
-          >
-            Собрать в боте
-          </a>
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
-        <h2 className="font-display text-3xl text-mist">Как это работает</h2>
-        <ol className="mt-8 grid gap-6 md:grid-cols-3">
-          {[
-            ["1", "Откройте бота", `Напишите @${BOT} и получите пробный день`],
-            ["2", "Оплатите тариф", "ЮMoney (СБП / карта), метка платежа в заказе"],
-            ["3", "Добавьте в Happ", "Одна ссылка подписки — список серверов"],
-          ].map(([n, title, desc]) => (
-            <li key={n} className="border-t border-mist/15 pt-5">
-              <div className="text-accent">{n}</div>
-              <div className="mt-2 font-display text-xl text-mist">{title}</div>
-              <p className="mt-2 text-sm text-mist/70">{desc}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <footer className="relative z-10 border-t border-mist/10 px-6 py-10 text-sm text-mist/55">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4">
-          <span>{BRAND} · {DOMAIN}</span>
-          <div className="flex gap-4">
-            <a href="/legal">Оферта</a>
-            <a href={`https://t.me/${BOT}`}>Telegram</a>
-            <a href="https://www.happ.su/main" target="_blank" rel="noreferrer">
-              Happ
-            </a>
+            <div id="price" className="animate-rise scroll-mt-24 [animation-delay:150ms]">
+              <PriceCalculator />
+            </div>
           </div>
-        </div>
-      </footer>
-    </main>
+        </section>
+
+        <section className="mx-auto w-full max-w-6xl px-5 py-20">
+          <div className="max-w-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Как это работает</div>
+            <h2 className="font-display mt-3 text-3xl font-semibold sm:text-4xl">Три шага до подключения</h2>
+          </div>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {steps.map((s) => (
+              <div key={s.n} className="card p-6">
+                <div className="font-display text-sm text-copper">{s.n}</div>
+                <h3 className="mt-3 text-lg font-semibold">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-mist/70">{s.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-y border-white/10 bg-white/[0.02]">
+          <div className="mx-auto grid w-full max-w-6xl gap-10 px-5 py-20 lg:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Почему проходит</div>
+              <h2 className="font-display mt-3 text-3xl font-semibold sm:text-4xl">Для сети это обычный российский сайт</h2>
+              <p className="mt-5 leading-relaxed text-mist/75">
+                Вход в сеть расположен в российском дата-центре и защищён так же, как любой сайт с сертификатом. Провайдер видит привычное соединение и пропускает его. Дальше трафик идёт на наши серверы за рубежом — вы получаете открытый интернет.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm text-mist/80">
+                {["Два подключения в одной подписке: обычное и «Обход»", "Протокол без заметных признаков VPN", "Подписка обновляется автоматически — новые серверы появятся сами"].map((t) => (
+                  <li key={t} className="flex gap-3"><span className="mt-1 h-4 w-4 shrink-0 rounded-full bg-accent/20 text-center text-[10px] leading-4 text-accent">✓</span>{t}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="card p-6 sm:p-8">
+              <div className="text-sm font-semibold">Поддерживаемые устройства</div>
+              <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                {["Android", "iPhone / iPad", "Windows", "macOS", "Android TV", "Apple TV"].map((d) => (
+                  <div key={d} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-mist/85">{d}</div>
+                ))}
+              </div>
+              <p className="mt-5 text-sm text-mist/60">Подключение через бесплатное приложение Happ. Подробная инструкция — <Link href="/setup" className="text-accent">здесь</Link>.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-3xl px-5 py-20">
+          <h2 className="font-display text-3xl font-semibold sm:text-4xl">Вопросы и ответы</h2>
+          <div className="mt-8 divide-y divide-white/10">
+            {faq.map((f) => (
+              <details key={f.q} className="group py-5">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium">
+                  {f.q}
+                  <span className="text-mist/50 transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-mist/70">{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-6xl px-5 pb-24">
+          <div className="card flex flex-col items-start justify-between gap-6 p-8 sm:flex-row sm:items-center sm:p-10">
+            <div>
+              <h2 className="font-display text-2xl font-semibold sm:text-3xl">Попробуйте сегодня — это бесплатно</h2>
+              <p className="mt-2 text-mist/70">День доступа после регистрации, карта не нужна.</p>
+            </div>
+            <Link href="/register" className="btn-primary shrink-0">Начать</Link>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </>
   );
 }

@@ -40,6 +40,7 @@ class SubscriptionOut(BaseModel):
     status: str
     starts_at: datetime
     ends_at: datetime
+    days_left: int | None = None
     traffic_limit_gb: int | None
     traffic_used_gb: Decimal
     device_limit: int
@@ -140,14 +141,14 @@ class AdminGrantIn(BaseModel):
     days: int = Field(gt=0, le=3650)
     traffic_gb: int | None = Field(default=None, ge=0)
     clear_traffic_limit: bool = False
-    device_limit: int | None = Field(default=None, ge=1, le=50)
+    device_limit: int | None = Field(default=None, ge=1, le=10000)
     username: str | None = None
 
 
 class AdminLimitsIn(BaseModel):
     traffic_gb: int | None = Field(default=None, ge=0)
     clear_traffic_limit: bool = False
-    device_limit: int | None = Field(default=None, ge=1, le=50)
+    device_limit: int | None = Field(default=None, ge=1, le=10000)
 
 
 class AdminBroadcastIn(BaseModel):

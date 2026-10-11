@@ -22,6 +22,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🚫 Отключить", callback_data="adm:revoke"),
                 InlineKeyboardButton(text="⚙️ Лимиты", callback_data="adm:limits"),
             ],
+            [InlineKeyboardButton(text="🛠 Кастомная подписка", callback_data="adm:custom")],
             [InlineKeyboardButton(text="📣 Рассылка", callback_data="adm:broadcast")],
             [
                 InlineKeyboardButton(text="🏷 Тарифы", callback_data="adm:plans"),
@@ -137,6 +138,7 @@ def user_card_keyboard(telegram_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="⚙️ Лимиты", callback_data=f"adm:u_limits:{telegram_id}"),
                 InlineKeyboardButton(text="🚫 Отключить", callback_data=f"adm:u_revoke:{telegram_id}"),
             ],
+            [InlineKeyboardButton(text="🛠 Кастомная подписка", callback_data=f"adm:u_custom:{telegram_id}")],
             [InlineKeyboardButton(text="⬅️ В меню", callback_data="adm:menu")],
         ]
     )
@@ -205,3 +207,50 @@ def promos_keyboard(items: list[dict]) -> InlineKeyboardMarkup:
     rows.append([InlineKeyboardButton(text="➕ Создать промо", callback_data="adm:promo_new")])
     rows.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="adm:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def custom_devices_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="1", callback_data="adm:cus_dev:1"),
+                InlineKeyboardButton(text="2", callback_data="adm:cus_dev:2"),
+                InlineKeyboardButton(text="3", callback_data="adm:cus_dev:3"),
+                InlineKeyboardButton(text="5", callback_data="adm:cus_dev:5"),
+                InlineKeyboardButton(text="10", callback_data="adm:cus_dev:10"),
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:cancel")],
+        ]
+    )
+
+
+def custom_traffic_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="♾ Безлимит", callback_data="adm:cus_gb:0")],
+            [
+                InlineKeyboardButton(text="10 GB", callback_data="adm:cus_gb:10"),
+                InlineKeyboardButton(text="50 GB", callback_data="adm:cus_gb:50"),
+                InlineKeyboardButton(text="100 GB", callback_data="adm:cus_gb:100"),
+                InlineKeyboardButton(text="500 GB", callback_data="adm:cus_gb:500"),
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:cancel")],
+        ]
+    )
+
+
+def custom_days_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="7 дн", callback_data="adm:cus_days:7"),
+                InlineKeyboardButton(text="30 дн", callback_data="adm:cus_days:30"),
+                InlineKeyboardButton(text="90 дн", callback_data="adm:cus_days:90"),
+            ],
+            [
+                InlineKeyboardButton(text="180 дн", callback_data="adm:cus_days:180"),
+                InlineKeyboardButton(text="365 дн", callback_data="adm:cus_days:365"),
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="adm:cancel")],
+        ]
+    )

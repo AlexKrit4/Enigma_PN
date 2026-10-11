@@ -105,7 +105,7 @@ services:
     ports:
       - "80:80"
       # Public :443 = Xray Reality. Site/API TLS is published on host :8443.
-      - "8443:443"
+      - "127.0.0.1:8444:443"
       # Web admin panel: https://bigwinzone.ru:1110/admin
       - "1110:1110"
     volumes:

@@ -234,6 +234,23 @@ async def yoomoney_webhook(
     order_result = await db.execute(select(Order).where(Order.payment_label == result.label))
     order = order_result.scalar_one_or_none()
     if not order:
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                forward = await client.post(
+                    "https://tetherchat.ru/api/vpn/webhooks/yoomoney",
+                    data=form,
+                )
+            if forward.status_code == 200:
+                log.info(
+                    "yoomoney_webhook_forwarded_tetherchat",
+                    label=result.label,
+                    status=forward.status_code,
+                )
+                return {"ok": True, "forwarded": "tetherchat", "label": result.label}
+        except Exception as exc:
+            log.warning("yoomoney_tetherchat_forward_failed", label=result.label, error=str(exc))
         raise HTTPException(status_code=404, detail="Order not found for label")
 
     # Amount check: accept withdraw_amount / credited amount with small fee slack

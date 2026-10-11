@@ -17,6 +17,9 @@ from bot.keyboards.admin import (
     admin_menu_keyboard,
     broadcast_audience_keyboard,
     confirm_action_keyboard,
+    custom_days_keyboard,
+    custom_devices_keyboard,
+    custom_traffic_keyboard,
     days_keyboard,
     devices_keyboard,
     orders_keyboard,
@@ -49,6 +52,10 @@ class AdminFSM(StatesGroup):
     wait_plan_name = State()
     wait_plan_price = State()
     wait_plan_days = State()
+    wait_custom_id = State()
+    wait_custom_devices = State()
+    wait_custom_gb = State()
+    wait_custom_days = State()
 
 
 def _is_admin(telegram_id: int) -> bool:
@@ -98,7 +105,7 @@ def _fmt_user_payload(payload: dict) -> str:
                 f"Статус: <b>{html.escape(str(sub.get('status')))}</b>",
                 f"До: <b>{html.escape(str(sub.get('ends_at')))}</b>",
                 f"Трафик: {used} / {limit if limit is not None else '∞'} GB",
-                f"Устройств: {sub.get('device_limit')}",
+                f"Устройств: {sub.get('device_limit') or '∞'}",
                 f"URL:\n<code>{html.escape(str(sub.get('sub_url') or ''))}</code>",
             ]
         )
@@ -1087,6 +1094,25 @@ async def cb_do_action(callback: CallbackQuery, state: FSMContext) -> None:
                 f"URL:\n<code>{html.escape(str(sub.get('sub_url') or ''))}</code>\n"
                 f"Увед юзеру: нет\nКто: {_who(callback.from_user)}"
             )
+        elif action == "custom":
+            gb = int(data.get("cus_gb") or 0)
+            result = await api.admin_grant(
+                int(data["tg_id"]),
+                int(data["cus_days"]),
+                traffic_gb=gb or None,
+                clear_traffic_limit=(gb == 0),
+                device_limit=int(data["cus_devices"]),
+            )
+            sub = result.get("subscription") or {}
+            text = (
+                "✅ Кастомная подписка выдана\n"
+                f"Пользователь: <code>{data['tg_id']}</code>\n"
+                f"Устройств: <b>{sub.get('device_limit', data['cus_devices'])}</b>\n"
+                f"Трафик: <b>{_gb_label(sub.get('traffic_limit_gb', gb))}</b>\n"
+                f"До: <b>{result.get('ends_at')}</b>\n"
+                f"URL:\n<code>{html.escape(str(sub.get('sub_url') or ''))}</code>\n"
+                f"Увед юзеру: нет\nКто: {_who(callback.from_user)}"
+            )
         elif action == "revoke":
             result = await api.admin_revoke(int(data["tg_id"]))
             text = f"🚫 Отключено ({html.escape(str(result.get('status')))})\nУвед юзеру: нет\nКто: {_who(callback.from_user)}"
@@ -1141,6 +1167,241 @@ async def _resolve_to_tid(raw: str) -> int | None:
         return int(tid) if tid else None
     except Exception:
         return None
+
+
+# ---- custom subscription (any devices / GB / days) ----
+
+CUSTOM_MAX_DEVICES = 10000
+CUSTOM_MAX_DAYS = 3650
+_UNLIMITED_WORDS = {"0", "∞", "inf", "infinity", "unlimited", "безлимит", "бесконечно", "бесконечность", "без лимита", "нет"}
+_DAY_UNITS = (
+    (("г", "год", "года", "лет", "y"), 365),
+    (("м", "мес", "месяц", "месяца", "месяцев", "m"), 30),
+    (("н", "нед", "неделя", "недели", "недель", "w"), 7),
+    (("д", "дн", "день", "дня", "дней", "d"), 1),
+)
+
+
+def _parse_positive_int(raw: str) -> int | None:
+    raw = (raw or "").strip().replace(" ", "")
+    if not raw.isdigit():
+        return None
+    value = int(raw)
+    return value if value > 0 else None
+
+
+def _parse_custom_gb(raw: str) -> int | None:
+    """Returns 0 for unlimited, N for N GB, None if invalid."""
+    raw = (raw or "").strip().lower()
+    if raw in _UNLIMITED_WORDS:
+        return 0
+    raw = raw.replace(" ", "").removesuffix("gb").removesuffix("гб")
+    return _parse_positive_int(raw)
+
+
+def _parse_custom_days(raw: str) -> int | None:
+    raw = (raw or "").strip().lower()
+    num = ""
+    for ch in raw:
+        if ch.isdigit():
+            num += ch
+        elif ch != " ":
+            break
+    if not num or int(num) < 1:
+        return None
+    unit = raw.lstrip("0123456789 ").strip().rstrip(".")
+    if not unit:
+        return int(num)
+    for names, mult in _DAY_UNITS:
+        if unit in names:
+            return int(num) * mult
+    return None
+
+
+def _gb_label(gb: int | None) -> str:
+    return "♾ безлимит" if not gb else f"{gb} GB"
+
+
+async def _custom_ask_devices(message: Message, tid: int, *, edit: bool) -> None:
+    text = (
+        f"🛠 Кастомная подписка для <code>{tid}</code>\n\n"
+        "<b>Шаг 1/3.</b> Сколько устройств?\n"
+        "Выберите кнопку или отправьте любое число."
+    )
+    if edit:
+        try:
+            await message.edit_text(text, reply_markup=custom_devices_keyboard())
+            return
+        except Exception:
+            pass
+    await message.answer(text, reply_markup=custom_devices_keyboard())
+
+
+async def _custom_set_devices(message: Message, state: FSMContext, devices: int, *, edit: bool) -> None:
+    await state.update_data(cus_devices=devices)
+    await state.set_state(AdminFSM.wait_custom_gb)
+    text = (
+        f"Устройств: <b>{devices}</b>\n\n"
+        "<b>Шаг 2/3.</b> Лимит трафика в GB?\n"
+        "Выберите кнопку или отправьте число. Безлимит — <code>0</code> или <code>∞</code>."
+    )
+    if edit:
+        await message.edit_text(text, reply_markup=custom_traffic_keyboard())
+    else:
+        await message.answer(text, reply_markup=custom_traffic_keyboard())
+
+
+async def _custom_set_gb(message: Message, state: FSMContext, gb: int, *, edit: bool) -> None:
+    await state.update_data(cus_gb=gb)
+    await state.set_state(AdminFSM.wait_custom_days)
+    data = await state.get_data()
+    text = (
+        f"Устройств: <b>{data.get('cus_devices')}</b>\n"
+        f"Трафик: <b>{_gb_label(gb)}</b>\n\n"
+        "<b>Шаг 3/3.</b> На какой срок?\n"
+        "Выберите кнопку или отправьте число дней. Можно с единицей: "
+        "<code>45</code>, <code>2 нед</code>, <code>3 мес</code>, <code>1 год</code>."
+    )
+    if edit:
+        await message.edit_text(text, reply_markup=custom_days_keyboard())
+    else:
+        await message.answer(text, reply_markup=custom_days_keyboard())
+
+
+async def _custom_set_days(message: Message, state: FSMContext, user, days: int, *, edit: bool) -> None:
+    await state.update_data(cus_days=days)
+    await state.set_state(None)
+    data = await state.get_data()
+    text = (
+        "🛠 <b>Кастомная подписка — проверьте</b>\n\n"
+        f"Пользователь: <code>{data.get('tg_id')}</code>\n"
+        f"Устройств: <b>{data.get('cus_devices')}</b>\n"
+        f"Трафик: <b>{_gb_label(data.get('cus_gb'))}</b>\n"
+        f"Срок: <b>{days} дн.</b>\n\n"
+        "Если подписка уже есть — срок добавится к текущему, лимиты заменятся.\n"
+        f"Увед юзеру: нет\nКто: {_who(user)}"
+    )
+    kb = confirm_action_keyboard("custom")
+    if edit:
+        await message.edit_text(text, reply_markup=kb)
+    else:
+        await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "adm:custom")
+async def cb_custom_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if _admin_denied(callback.from_user):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(AdminFSM.wait_custom_id)
+    assert callback.message
+    await callback.message.edit_text(
+        "🛠 <b>Кастомная подписка</b>\n\nВведите Telegram ID или @username пользователя:",
+        reply_markup=admin_cancel_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("adm:u_custom:"))
+async def cb_u_custom(callback: CallbackQuery, state: FSMContext) -> None:
+    if _admin_denied(callback.from_user):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    assert callback.data and callback.message
+    tid = int(callback.data.rsplit(":", 1)[-1])
+    await state.clear()
+    await state.update_data(tg_id=tid, action="custom")
+    await state.set_state(AdminFSM.wait_custom_devices)
+    await _custom_ask_devices(callback.message, tid, edit=True)
+    await callback.answer()
+
+
+@router.message(AdminFSM.wait_custom_id)
+async def fsm_custom_id(message: Message, state: FSMContext) -> None:
+    if _admin_denied(message.from_user):
+        return
+    tid = await _resolve_to_tid(message.text or "")
+    if not tid:
+        await message.answer("Не найден. Введите numeric Telegram ID или @username:", reply_markup=admin_cancel_keyboard())
+        return
+    await state.update_data(tg_id=tid, action="custom")
+    await state.set_state(AdminFSM.wait_custom_devices)
+    await _custom_ask_devices(message, tid, edit=False)
+
+
+@router.callback_query(F.data.startswith("adm:cus_dev:"))
+async def cb_custom_devices(callback: CallbackQuery, state: FSMContext) -> None:
+    if _admin_denied(callback.from_user):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    assert callback.data and callback.message
+    await _custom_set_devices(callback.message, state, int(callback.data.rsplit(":", 1)[-1]), edit=True)
+    await callback.answer()
+
+
+@router.message(AdminFSM.wait_custom_devices)
+async def fsm_custom_devices(message: Message, state: FSMContext) -> None:
+    if _admin_denied(message.from_user):
+        return
+    devices = _parse_positive_int(message.text or "")
+    if not devices or devices > CUSTOM_MAX_DEVICES:
+        await message.answer(
+            f"Нужно целое число устройств от 1 до {CUSTOM_MAX_DEVICES}:",
+            reply_markup=custom_devices_keyboard(),
+        )
+        return
+    await _custom_set_devices(message, state, devices, edit=False)
+
+
+@router.callback_query(F.data.startswith("adm:cus_gb:"))
+async def cb_custom_gb(callback: CallbackQuery, state: FSMContext) -> None:
+    if _admin_denied(callback.from_user):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    assert callback.data and callback.message
+    await _custom_set_gb(callback.message, state, int(callback.data.rsplit(":", 1)[-1]), edit=True)
+    await callback.answer()
+
+
+@router.message(AdminFSM.wait_custom_gb)
+async def fsm_custom_gb(message: Message, state: FSMContext) -> None:
+    if _admin_denied(message.from_user):
+        return
+    gb = _parse_custom_gb(message.text or "")
+    if gb is None:
+        await message.answer(
+            "Нужно целое число GB, либо <code>0</code> / <code>∞</code> для безлимита:",
+            reply_markup=custom_traffic_keyboard(),
+        )
+        return
+    await _custom_set_gb(message, state, gb, edit=False)
+
+
+@router.callback_query(F.data.startswith("adm:cus_days:"))
+async def cb_custom_days(callback: CallbackQuery, state: FSMContext) -> None:
+    if _admin_denied(callback.from_user):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    assert callback.data and callback.message
+    days = int(callback.data.rsplit(":", 1)[-1])
+    await _custom_set_days(callback.message, state, callback.from_user, days, edit=True)
+    await callback.answer()
+
+
+@router.message(AdminFSM.wait_custom_days)
+async def fsm_custom_days(message: Message, state: FSMContext) -> None:
+    if _admin_denied(message.from_user):
+        return
+    days = _parse_custom_days(message.text or "")
+    if not days or days > CUSTOM_MAX_DAYS:
+        await message.answer(
+            f"Не понял срок. Примеры: <code>45</code>, <code>2 нед</code>, <code>3 мес</code>, <code>1 год</code> "
+            f"(максимум {CUSTOM_MAX_DAYS} дн.):",
+            reply_markup=custom_days_keyboard(),
+        )
+        return
+    await _custom_set_days(message, state, message.from_user, days, edit=False)
 
 
 @router.message(StateFilter(AdminFSM), F.text)

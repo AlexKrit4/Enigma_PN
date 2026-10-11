@@ -61,7 +61,7 @@ class MarzbanClient:
         payload: dict[str, Any] = {
             "username": username,
             "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
-            "inbounds": {"vless": ["VLESS TCP REALITY"]},
+            "inbounds": {"vless": ["VLESS TCP REALITY", "VLESS TCP REALITY 443"]},
             "expire": expire_ts,
             "data_limit": data_limit_bytes or 0,
             "data_limit_reset_strategy": "no_reset",

@@ -42,7 +42,7 @@ export default function Cabinet() {
     }
     load();
     if (params.get("paid") === "1") setNotice("Оплата получена. Если подписка ещё не обновилась — подождите минуту, страница обновится сама.");
-    if (params.get("welcome") === "1") setNotice("Аккаунт создан. Пробный день уже активен — добавьте подписку в Happ и проверьте подключение.");
+    if (params.get("welcome") === "1") setNotice("Почта подтверждена. Пробный период уже активен — добавьте подписку в Happ и проверьте подключение.");
   }, [load, params, router]);
 
   useEffect(() => {
@@ -135,7 +135,7 @@ export default function Cabinet() {
                         {isTrial ? "Пробный период" : "Подписка активна"}
                       </span>
                     </div>
-                    <h2 className="font-display mt-3 text-2xl font-semibold">{isTrial ? "Обход белых списков · пробный день" : sub.title || "Обход белых списков"}</h2>
+                    <h2 className="font-display mt-3 text-2xl font-semibold">{isTrial ? "Обход белых списков · пробный период" : sub.title || "Обход белых списков"}</h2>
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-mist/55">действует до</div>
@@ -184,7 +184,7 @@ export default function Cabinet() {
           {sub && sub.status === "active" && (
             <section className="card p-6 sm:p-8">
               <h2 className="font-display text-xl font-semibold">Добавить устройства</h2>
-              <p className="mt-1 text-sm text-mist/65">Доплата — 50 ₽ за устройство за каждый оставшийся месяц подписки.</p>
+              <p className="mt-1 text-sm text-mist/65">Доплата — 20 ₽ за устройство за каждый оставшийся месяц подписки.</p>
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button type="button" className="stepper" disabled={extra <= 1} onClick={() => setExtra((v) => Math.max(1, v - 1))}>−</button>
                 <div className="min-w-[8rem] text-center font-display text-xl">+{devicesLabel(extra)}</div>

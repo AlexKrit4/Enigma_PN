@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { devicesLabel, formatRub, getToken, monthsLabel, siteApi, type Pricing } from "@/lib/siteApi";
+import { devicesLabel, formatRub, getToken, monthsLabel, pluralRu, siteApi, type Pricing } from "@/lib/siteApi";
 
 const FALLBACK: Pricing = {
   plan_name: "Обход белых списков",
   base_devices: 5,
   max_devices: 50,
-  extra_device_price_per_month: 50,
-  trial_days: 1,
+  extra_device_price_per_month: 20,
+  trial_days: 3,
   periods: [
     { months: 1, price: 200, per_month: 200 },
     { months: 3, price: 550, per_month: 183 },
@@ -136,7 +136,7 @@ export default function PriceCalculator({ mode = "landing", initialMonths = 1, i
       </button>
       {mode === "landing" && (
         <p className="mt-3 text-center text-xs text-mist/55">
-          После регистрации — {pricing.trial_days === 1 ? "1 день" : `${pricing.trial_days} дн.`} бесплатно, без карты. Оплата через ЮMoney.
+          После регистрации — {pricing.trial_days} {pluralRu(pricing.trial_days, "день", "дня", "дней")} бесплатно, без карты. Оплата через ЮMoney.
         </p>
       )}
     </div>

@@ -59,6 +59,7 @@ class User(Base):
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     referral_code: Mapped[str] = mapped_column(String(16), unique=True, default=_referral_code)
     referred_by_id: Mapped[uuid.UUID | None] = mapped_column(

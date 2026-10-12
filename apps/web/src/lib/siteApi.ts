@@ -36,6 +36,7 @@ export type Me = {
 };
 
 export type Session = { access_token: string; user: Me };
+export type RegisterResult = { status: "pending_verification" | string; email: string };
 
 export type Pricing = {
   plan_name: string;
@@ -132,9 +133,13 @@ export const siteApi = {
   quote: (months: number, extra_devices: number) =>
     request<Quote>("/api/v1/site/orders/quote", { method: "POST", body: JSON.stringify({ months, extra_devices }) }, false),
   register: (email: string, password: string) =>
-    request<Session>("/api/v1/site/register", { method: "POST", body: JSON.stringify({ email, password }) }, false),
+    request<RegisterResult>("/api/v1/site/register", { method: "POST", body: JSON.stringify({ email, password }) }, false),
   login: (email: string, password: string) =>
     request<Session>("/api/v1/site/login", { method: "POST", body: JSON.stringify({ email, password }) }, false),
+  verify: (email: string, code: string) =>
+    request<Session>("/api/v1/site/verify", { method: "POST", body: JSON.stringify({ email, code }) }, false),
+  resend: (email: string) =>
+    request<{ ok: boolean; cooldown?: number }>("/api/v1/site/resend", { method: "POST", body: JSON.stringify({ email }) }, false),
   me: () => request<Me>("/api/v1/site/me"),
   createOrder: (months: number, extra_devices: number) =>
     request<Order>("/api/v1/site/orders", { method: "POST", body: JSON.stringify({ months, extra_devices }) }),

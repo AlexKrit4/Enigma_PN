@@ -216,3 +216,12 @@ class SiteOrderIn(BaseModel):
 
 class SiteDevicesOrderIn(BaseModel):
     extra_devices: int = Field(ge=1, le=45)
+
+
+class SiteVerifyIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
+class SiteResendIn(BaseModel):
+    email: EmailStr

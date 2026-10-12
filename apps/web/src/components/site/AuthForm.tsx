@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { setToken, siteApi } from "@/lib/siteApi";
+import { ApiError, setToken, siteApi } from "@/lib/siteApi";
 
 export default function AuthForm({ mode }: { mode: "register" | "login" }) {
   const router = useRouter();
@@ -16,6 +16,8 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
   const months = params.get("months");
   const devices = params.get("devices");
   const next = months ? `/cabinet?months=${months}&devices=${devices ?? ""}&buy=1` : "/cabinet";
+  const verifyNext = (mail: string) =>
+    `/verify?email=${encodeURIComponent(mail)}${months ? `&months=${months}&devices=${devices ?? ""}` : ""}`;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,11 +27,21 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
       return;
     }
     setBusy(true);
+    const mail = email.trim();
     try {
-      const session = mode === "register" ? await siteApi.register(email.trim(), password) : await siteApi.login(email.trim(), password);
-      setToken(session.access_token);
-      router.replace(mode === "register" && !months ? "/cabinet?welcome=1" : next);
+      if (mode === "register") {
+        await siteApi.register(mail, password);
+        router.replace(verifyNext(mail));
+      } else {
+        const session = await siteApi.login(mail, password);
+        setToken(session.access_token);
+        router.replace(next);
+      }
     } catch (err) {
+      if (mode === "login" && err instanceof ApiError && err.status === 403) {
+        router.replace(verifyNext(mail));
+        return;
+      }
       setError(err instanceof Error ? err.message : "Что-то пошло не так. Попробуйте ещё раз.");
     } finally {
       setBusy(false);
@@ -41,7 +53,7 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
     <form onSubmit={onSubmit} className="card w-full max-w-md p-7 sm:p-9">
       <h1 className="font-display text-3xl font-semibold">{isRegister ? "Создать аккаунт" : "Войти"}</h1>
       <p className="mt-2 text-sm text-mist/65">
-        {isRegister ? "Сразу после регистрации вы получите один день доступа бесплатно." : "Введите почту и пароль от личного кабинета."}
+        {isRegister ? "После подтверждения почты кодом вы получите 3 дня доступа бесплатно." : "Введите почту и пароль от личного кабинета."}
       </p>
       <label className="mt-7 block text-sm font-medium">
         Электронная почта

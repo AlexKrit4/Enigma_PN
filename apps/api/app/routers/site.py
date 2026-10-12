@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from math import ceil
+import secrets
 from uuid import UUID
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -14,7 +16,14 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import create_access_token, get_current_user
 from app.models.entities import Order, OrderStatus, Plan, User
-from app.schemas import SiteDevicesOrderIn, SiteLoginIn, SiteOrderIn, SiteRegisterIn
+from app.schemas import (
+    SiteDevicesOrderIn,
+    SiteLoginIn,
+    SiteOrderIn,
+    SiteRegisterIn,
+    SiteResendIn,
+    SiteVerifyIn,
+)
 from app.services.provisioning import (
     create_order,
     create_trial,
@@ -30,6 +39,7 @@ from app.services.site_pricing import (
     quote_subscription,
     to_money,
 )
+from app.services.emailer import send_verification_code
 from app.services.yoomoney import YooMoneyProvider
 
 log = structlog.get_logger(__name__)
@@ -50,6 +60,58 @@ def _verify_password(password: str, password_hash: str) -> bool:
         return bcrypt.checkpw(_truncate_password(password), password_hash.encode("utf-8"))
     except ValueError:
         return False
+
+
+CODE_TTL = 600
+CODE_MAX_TRIES = 10
+RESEND_COOLDOWN = 60
+
+
+def _verify_key(email: str) -> str:
+    return f"site_verify:{email}"
+
+
+def _tries_key(email: str) -> str:
+    return f"site_verify_tries:{email}"
+
+
+def _cooldown_key(email: str) -> str:
+    return f"site_verify_cd:{email}"
+
+
+async def _issue_code(redis, email: str, settings: Settings) -> bool:
+    """Сгенерировать и отправить код. False, если действует кулдаун на переотправку."""
+    if await redis.exists(_cooldown_key(email)):
+        return False
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    digest = hashlib.sha256(code.encode("utf-8")).hexdigest()
+    pipe = redis.pipeline()
+    pipe.set(_verify_key(email), digest, ex=CODE_TTL)
+    pipe.set(_tries_key(email), 0, ex=CODE_TTL)
+    pipe.set(_cooldown_key(email), 1, ex=RESEND_COOLDOWN)
+    await pipe.execute()
+    try:
+        await send_verification_code(email, code, settings)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось отправить письмо с кодом. Попробуйте через пару минут.",
+        )
+    return True
+
+
+async def _check_code(redis, email: str, code: str) -> bool:
+    digest = await redis.get(_verify_key(email))
+    if not digest:
+        return False
+    tries = int(await redis.get(_tries_key(email)) or 0)
+    if tries >= CODE_MAX_TRIES:
+        return False
+    await redis.incr(_tries_key(email))
+    ok = hashlib.sha256(code.strip().encode("utf-8")).hexdigest() == digest
+    if ok:
+        await redis.delete(_verify_key(email), _tries_key(email))
+    return ok
 
 
 def _order_payload(order: Order, payment_url: str | None = None) -> dict:
@@ -103,19 +165,42 @@ async def site_quote(body: SiteOrderIn) -> dict:
 @router.post("/register")
 async def site_register(
     body: SiteRegisterIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     email = body.email.strip().lower()
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    if user and user.password_hash:
+    if user and user.password_hash and user.email_verified:
         raise HTTPException(status_code=409, detail="Этот email уже зарегистрирован. Войдите в аккаунт.")
     if not user:
         user = User(email=email)
         db.add(user)
     user.password_hash = _hash_password(body.password)
-    await db.flush()
+    user.email_verified = False
+    await db.commit()
+
+    await _issue_code(request.app.state.redis, email, settings)
+    log.info("site_user_registered_pending", user_id=str(user.id))
+    return {"status": "pending_verification", "email": email}
+
+
+@router.post("/verify")
+async def site_verify(
+    body: SiteVerifyIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    email = body.email.strip().lower()
+    if not await _check_code(request.app.state.redis, email, body.code):
+        raise HTTPException(status_code=400, detail="Неверный или просроченный код. Запросите новый.")
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user or not user.password_hash:
+        raise HTTPException(status_code=400, detail="Сначала зарегистрируйтесь.")
+    user.email_verified = True
 
     await create_trial(
         db,
@@ -127,16 +212,34 @@ async def site_register(
     )
     await db.commit()
     await db.refresh(user)
-    log.info("site_user_registered", user_id=str(user.id))
+    log.info("site_user_verified", user_id=str(user.id))
     return {
         "access_token": create_access_token(user.id, settings),
         "user": await _me_payload(db, user, settings),
     }
 
 
+@router.post("/resend")
+async def site_resend_code(
+    body: SiteResendIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    email = body.email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user and user.password_hash and not user.email_verified:
+        sent = await _issue_code(request.app.state.redis, email, settings)
+        if not sent:
+            raise HTTPException(status_code=429, detail="Код уже отправлен. Подождите минуту и запросите новый.")
+    return {"ok": True, "cooldown": RESEND_COOLDOWN}
+
+
 @router.post("/login")
 async def site_login(
     body: SiteLoginIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
@@ -145,6 +248,9 @@ async def site_login(
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not _verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Неверный email или пароль")
+    if not user.email_verified:
+        await _issue_code(request.app.state.redis, email, settings)
+        raise HTTPException(status_code=403, detail="Подтвердите email — мы отправили вам код.")
     return {
         "access_token": create_access_token(user.id, settings),
         "user": await _me_payload(db, user, settings),

@@ -202,14 +202,15 @@ async def site_verify(
         raise HTTPException(status_code=400, detail="Сначала зарегистрируйтесь.")
     user.email_verified = True
 
-    await create_trial(
-        db,
-        user,
-        settings,
-        traffic_gb=None,
-        device_limit=SITE_BASE_DEVICES,
-        duration_days=SITE_TRIAL_DAYS,
-    )
+    if not await get_active_subscription(db, user.id):
+        await create_trial(
+            db,
+            user,
+            settings,
+            traffic_gb=None,
+            device_limit=SITE_BASE_DEVICES,
+            duration_days=SITE_TRIAL_DAYS,
+        )
     await db.commit()
     await db.refresh(user)
     log.info("site_user_verified", user_id=str(user.id))

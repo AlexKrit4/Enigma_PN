@@ -20,6 +20,9 @@ def upgrade() -> None:
         "users",
         sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
+    # Аккаунты, созданные до введения подтверждения почты, считаем подтверждёнными,
+    # чтобы они не потеряли доступ до настройки SMTP.
+    op.execute("UPDATE users SET email_verified = true")
 
 
 def downgrade() -> None:

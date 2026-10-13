@@ -8,7 +8,7 @@ export default function AuthLayout({ children, variant }: { children: React.Reac
         <aside className="auth-aside">
           <div>
             <div className="site-eyebrow">{variant === "login" ? "С ВОЗВРАЩЕНИЕМ" : "НАЧНИТЕ БЕЗ ОПЛАТЫ"}</div>
-            <h2>{variant === "login" ? <>Ваш интернет.<br />Ваши правила.</> : <>Три дня.<br />Все возможности.</>}</h2>
+            <h2>{variant === "login" ? <>Ваш интернет.<br />Ваши правила.</> : <>Один день.<br />Все возможности.</>}</h2>
             <ConnectionArtwork compact />
           </div>
         </aside>

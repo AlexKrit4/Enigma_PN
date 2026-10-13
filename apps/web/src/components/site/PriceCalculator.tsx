@@ -10,8 +10,8 @@ const FALLBACK: Pricing = {
   plan_name: "Обход белых списков",
   base_devices: 5,
   max_devices: 50,
-  extra_device_price_per_month: 50,
-  trial_days: 1,
+  extra_device_price_per_month: 20,
+  trial_days: 3,
   periods: [
     { months: 1, price: 200, per_month: 200 },
     { months: 3, price: 550, per_month: 183 },

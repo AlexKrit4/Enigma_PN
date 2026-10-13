@@ -68,7 +68,7 @@ export default function VerifyForm() {
       <div className="auth-step" aria-label="Шаг 2 из 2: подтверждение почты"><span className="is-current" /><span className="is-current" /></div>
       <h1>Проверьте почту</h1>
       <p className="auth-description">
-        Мы отправили код на <strong>{email}</strong>. Введите его — и пробный период на 1 день активируется.
+        Мы отправили код на <strong>{email}</strong>. Введите его — и пробный период на 3 дня активируется.
       </p>
       <label className="site-label">
         Код из письма

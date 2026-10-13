@@ -1,4 +1,4 @@
-"""Отправка писем с кодом подтверждения через SMTP (smtplib в threadpool)."""
+"""Отправка писем с кодом подтверждения: Resend HTTPS API или SMTP (smtplib в threadpool)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import smtplib
 from email.message import EmailMessage
 
+import httpx
 import structlog
 
 from app.config import Settings, get_settings
@@ -16,6 +17,26 @@ log = structlog.get_logger(__name__)
 def smtp_configured(settings: Settings | None = None) -> bool:
     settings = settings or get_settings()
     return bool(settings.smtp_host and settings.smtp_user and settings.smtp_password)
+
+
+def _is_resend(settings: Settings) -> bool:
+    return settings.smtp_host.rstrip(".").lower() == "smtp.resend.com"
+
+
+async def _send_resend(settings: Settings, to_addr: str, subject: str, body: str) -> None:
+    """Resend HTTPS API — используется, когда провайдер блокирует исходящие SMTP-порты."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {settings.smtp_password}"},
+            json={
+                "from": settings.smtp_from or settings.smtp_user,
+                "to": [to_addr],
+                "subject": subject,
+                "text": body,
+            },
+        )
+        resp.raise_for_status()
 
 
 def _send_smtp(settings: Settings, to_addr: str, subject: str, body: str) -> None:
@@ -52,7 +73,10 @@ async def send_verification_code(email: str, code: str, settings: Settings | Non
         log.warning("smtp_not_configured_code_logged", email=email, code=code)
         return False
     try:
-        await asyncio.to_thread(_send_smtp, settings, email, subject, body)
+        if _is_resend(settings):
+            await _send_resend(settings, email, subject, body)
+        else:
+            await asyncio.to_thread(_send_smtp, settings, email, subject, body)
         log.info("verification_email_sent", email=email)
         return True
     except Exception as exc:

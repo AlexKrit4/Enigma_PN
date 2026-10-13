@@ -173,7 +173,7 @@ export default function Cabinet() {
           {sub && sub.status === "active" && (
             <section className="site-panel">
               <h2>Ещё устройства?</h2>
-              <p className="site-panel-description">20 ₽ за устройство за каждый оставшийся месяц подписки.</p>
+              <p className="site-panel-description">50 ₽ за устройство за каждый оставшийся месяц подписки.</p>
               <div className="devices-buy">
                 <div className="device-selector">
                   <button type="button" className="site-stepper" aria-label="Меньше дополнительных устройств" disabled={extra <= 1} onClick={() => setExtra((v) => Math.max(1, v - 1))}><Minus size={17} aria-hidden /></button>

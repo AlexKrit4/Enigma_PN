@@ -10,9 +10,9 @@ SITE_PLAN_SLUG = "site-bypass"
 SITE_PLAN_NAME = "Обход белых списков"
 SITE_PLAN_GROUP = "сайт"
 SITE_BASE_DEVICES = 5
-SITE_EXTRA_DEVICE_PRICE_PER_MONTH = 20
+SITE_EXTRA_DEVICE_PRICE_PER_MONTH = 50
 SITE_MAX_DEVICES = 50
-SITE_TRIAL_DAYS = 3
+SITE_TRIAL_DAYS = 1
 
 # months -> price in RUB for the base tariff (5 devices, unlimited traffic)
 SITE_PERIODS: dict[int, int] = {1: 200, 3: 550, 6: 1050, 12: 2000}

@@ -17,7 +17,7 @@ export default function HomePage() {
             <h1>Интернет.<br />Без закрытых <span>дверей.</span></h1>
             <p className="hero-description">Ваши сайты, приложения и видео — даже в сетях с белыми списками. Один VPN для телефона, ноутбука и всех ваших устройств.</p>
             <div className="hero-actions">
-              <Link href="/register" className="site-btn site-btn--dark">3 дня бесплатно <ArrowUpRight size={18} aria-hidden /></Link>
+              <Link href="/register" className="site-btn site-btn--dark">1 день бесплатно <ArrowUpRight size={18} aria-hidden /></Link>
               <Link href="#price" className="site-link">Выбрать тариф</Link>
             </div>
             <div className="hero-note"><Check size={14} aria-hidden /> Без карты. Просто подтвердите почту.</div>
@@ -59,9 +59,9 @@ export default function HomePage() {
                 <li><Check size={18} aria-hidden /> Обход белых списков</li>
                 <li><Check size={18} aria-hidden /> 5 устройств и безлимитный трафик</li>
                 <li><Check size={18} aria-hidden /> Все доступные серверы</li>
-                <li><Check size={18} aria-hidden /> Дополнительное устройство — 20 ₽ / месяц</li>
+                <li><Check size={18} aria-hidden /> Дополнительное устройство — 50 ₽ / месяц</li>
               </ul>
-              <div className="trial-note"><LockSimple size={22} aria-hidden /><div><strong>Сначала попробуйте. Потом решайте.</strong><p>3 дня бесплатно после подтверждения почты. Без привязки карты.</p></div></div>
+              <div className="trial-note"><LockSimple size={22} aria-hidden /><div><strong>Сначала попробуйте. Потом решайте.</strong><p>1 день бесплатно после подтверждения почты. Без привязки карты.</p></div></div>
             </div>
             <PriceCalculator />
           </div>
@@ -88,8 +88,8 @@ export default function HomePage() {
           </div>
         </section>
         <section className="site-container final-cta">
-          <div><h2>Откройте свой интернет.</h2><p>3 дня, чтобы проверить всё на своих устройствах. Бесплатно.</p></div>
-          <Link href="/register" className="site-btn site-btn--dark">Начать с 3 дней бесплатно <ArrowRight size={18} aria-hidden /></Link>
+          <div><h2>Откройте свой интернет.</h2><p>1 день, чтобы проверить всё на своих устройствах. Бесплатно.</p></div>
+          <Link href="/register" className="site-btn site-btn--dark">Начать с 1 дня бесплатно <ArrowRight size={18} aria-hidden /></Link>
         </section>
       </main>
     </SiteShell>

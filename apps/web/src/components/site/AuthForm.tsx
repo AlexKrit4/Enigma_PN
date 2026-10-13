@@ -56,7 +56,7 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
       {isRegister && <div className="auth-step" aria-label="Шаг 1 из 2: регистрация"><span className="is-current" /><span /></div>}
       <h1>{isRegister ? "Создать аккаунт" : "Войти в кабинет"}</h1>
       <p className="auth-description">
-        {isRegister ? "После подтверждения почты кодом вы получите 3 дня доступа бесплатно." : "Введите почту и пароль от личного кабинета."}
+        {isRegister ? "После подтверждения почты кодом вы получите 1 день доступа бесплатно." : "Введите почту и пароль от личного кабинета."}
       </p>
       <label className="site-label">
         Электронная почта

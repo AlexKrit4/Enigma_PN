@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import NumberFlow from "@number-flow/react";
+import { ArrowRight, Minus, Plus, GlobeHemisphereWest } from "@phosphor-icons/react";
 import { devicesLabel, formatRub, getToken, monthsLabel, pluralRu, siteApi, type Pricing } from "@/lib/siteApi";
 
 const FALLBACK: Pricing = {
@@ -66,77 +68,59 @@ export default function PriceCalculator({ mode = "landing", initialMonths = 1, i
   }
 
   return (
-    <div className="card p-6 sm:p-8">
-      <div className="flex items-start justify-between gap-4">
+    <div className="price-calculator">
+      <div className="calculator-heading">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Единый тариф</div>
-          <h3 className="font-display mt-2 text-2xl font-semibold sm:text-3xl">{pricing.plan_name}</h3>
-          <p className="mt-2 text-sm text-mist/70">Безлимитный трафик · {pricing.base_devices} устройств включено · все страны выхода</p>
+          <div className="site-eyebrow">ВАША ПОДПИСКА</div>
+          <h3>{pricing.plan_name}</h3>
         </div>
-        <div className="hidden text-right sm:block">
-          <div className="font-display text-4xl font-semibold">{formatRub(perMonth)}</div>
-          <div className="text-xs text-mist/60">в месяц</div>
-        </div>
+        <GlobeHemisphereWest aria-hidden />
       </div>
-
-      <div className="mt-7">
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-medium">Срок</span>
-          {discount > 0 && <span className="rounded-full bg-copper/15 px-2.5 py-0.5 text-xs font-semibold text-copper">выгода {discount}%</span>}
+      <div className="calculator-field">
+        <div className="field-heading">
+          <span id="period-label">01 / Срок подписки</span>
+          {discount > 0 && <span className="discount-badge">выгода {discount}%</span>}
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="period-selector" role="group" aria-labelledby="period-label">
           {pricing.periods.map((p) => (
-            <button
-              key={p.months}
-              type="button"
-              onClick={() => setMonths(p.months)}
-              className={`rounded-xl border px-2 py-3 text-center transition ${
-                p.months === months ? "border-accent bg-accent/15 text-mist" : "border-white/10 bg-white/[0.03] text-mist/70 hover:border-white/25"
-              }`}
-            >
-              <div className="text-sm font-semibold">{monthsLabel(p.months)}</div>
-              <div className="mt-0.5 text-xs text-mist/60">{formatRub(p.price)}</div>
+            <button key={p.months} type="button" onClick={() => setMonths(p.months)} className="period-option" aria-pressed={p.months === months}>
+              <strong>{monthsLabel(p.months)}</strong>
+              <span>{formatRub(p.price)}</span>
             </button>
           ))}
         </div>
       </div>
-
-      <div className="mt-6">
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-medium">Устройства</span>
-          <span className="text-xs text-mist/60">
-            сверх {pricing.base_devices} — {formatRub(pricing.extra_device_price_per_month)} за устройство в месяц
-          </span>
+      <div className="calculator-field">
+        <div className="field-heading">
+          <span id="devices-label">02 / Количество устройств</span>
+          <span className="site-muted">до {pricing.max_devices}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <button type="button" className="stepper" aria-label="Меньше устройств" disabled={devices <= pricing.base_devices} onClick={() => setDevices((d) => Math.max(pricing.base_devices, d - 1))}>−</button>
-          <div className="min-w-[9rem] flex-1 text-center">
-            <div className="font-display text-2xl font-semibold">{devicesLabel(devices)}</div>
-            <div className="text-xs text-mist/60">{extra > 0 ? `+${extra} сверх тарифа` : "входит в тариф"}</div>
+        <div className="device-selector" role="group" aria-labelledby="devices-label">
+          <button type="button" className="site-stepper" aria-label="Меньше устройств" disabled={devices <= pricing.base_devices} onClick={() => setDevices((d) => Math.max(pricing.base_devices, d - 1))}><Minus size={18} aria-hidden /></button>
+          <div className="device-value" aria-live="polite">
+            {devicesLabel(devices)}
+            <small>{extra > 0 ? `+${extra} сверх тарифа` : "включены в подписку"}</small>
           </div>
-          <button type="button" className="stepper" aria-label="Больше устройств" disabled={devices >= pricing.max_devices} onClick={() => setDevices((d) => Math.min(pricing.max_devices, d + 1))}>+</button>
+          <button type="button" className="site-stepper" aria-label="Больше устройств" disabled={devices >= pricing.max_devices} onClick={() => setDevices((d) => Math.min(pricing.max_devices, d + 1))}><Plus size={18} aria-hidden /></button>
         </div>
+        <p className="calculator-help">{pricing.base_devices} включено. Каждое дополнительное — {formatRub(pricing.extra_device_price_per_month)} / месяц.</p>
       </div>
-
-      <div className="mt-7 rounded-2xl bg-white/[0.04] p-4 text-sm">
-        <div className="flex justify-between text-mist/70"><span>Тариф на {monthsLabel(months)}</span><span>{formatRub(period.price)}</span></div>
-        {extra > 0 && (
-          <div className="mt-1.5 flex justify-between text-mist/70"><span>+{devicesLabel(extra)} × {months} мес.</span><span>{formatRub(extraPrice)}</span></div>
-        )}
-        <div className="mt-3 flex items-end justify-between border-t border-white/10 pt-3">
-          <span className="font-medium">Итого</span>
-          <span className="font-display text-3xl font-semibold">{formatRub(total)}</span>
-        </div>
+      <div className="price-breakdown">
+        <div><span>Тариф на {monthsLabel(months)}</span><span>{formatRub(period.price)}</span></div>
+        {extra > 0 && <div><span>+{devicesLabel(extra)} × {months} мес.</span><span>{formatRub(extraPrice)}</span></div>}
       </div>
-
-      {error && <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-
-      <button type="button" onClick={submit} disabled={busy} className="btn-primary mt-5 w-full">
+      <div className="price-total" aria-live="polite" aria-atomic="true">
+        <span>Итого за {monthsLabel(months)}</span>
+        <div><strong><NumberFlow value={total} locales="ru-RU" format={{ useGrouping: true }} suffix=" ₽" /></strong><small>{formatRub(perMonth)} / месяц</small></div>
+      </div>
+      {error && <p className="site-alert" role="alert">{error}</p>}
+      <button type="button" onClick={submit} disabled={busy} className="site-btn site-btn--orange site-btn--full">
         {busy ? "Секунду…" : submitLabel ?? (mode === "landing" ? "Оформить подписку" : "Перейти к оплате")}
+        <ArrowRight size={18} aria-hidden />
       </button>
       {mode === "landing" && (
-        <p className="mt-3 text-center text-xs text-mist/55">
-          После регистрации — {pricing.trial_days} {pluralRu(pricing.trial_days, "день", "дня", "дней")} бесплатно, без карты. Оплата через ЮMoney.
+        <p className="calculator-note">
+          {`Сначала ${pricing.trial_days} ${pluralRu(pricing.trial_days, "день", "дня", "дней")} бесплатно. Оплата подписки через ЮMoney.`}
         </p>
       )}
     </div>

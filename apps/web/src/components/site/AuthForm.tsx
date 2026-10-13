@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { ArrowRight, Eye, EyeSlash } from "@phosphor-icons/react";
 import { ApiError, setToken, siteApi } from "@/lib/siteApi";
 
 export default function AuthForm({ mode }: { mode: "register" | "login" }) {
@@ -10,6 +11,7 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,33 +52,36 @@ export default function AuthForm({ mode }: { mode: "register" | "login" }) {
 
   const isRegister = mode === "register";
   return (
-    <form onSubmit={onSubmit} className="card w-full max-w-md p-7 sm:p-9">
-      <h1 className="font-display text-3xl font-semibold">{isRegister ? "Создать аккаунт" : "Войти"}</h1>
-      <p className="mt-2 text-sm text-mist/65">
+    <form onSubmit={onSubmit} className="auth-form">
+      {isRegister && <div className="auth-step" aria-label="Шаг 1 из 2: регистрация"><span className="is-current" /><span /></div>}
+      <h1>{isRegister ? "Создать аккаунт" : "Войти в кабинет"}</h1>
+      <p className="auth-description">
         {isRegister ? "После подтверждения почты кодом вы получите 3 дня доступа бесплатно." : "Введите почту и пароль от личного кабинета."}
       </p>
-      <label className="mt-7 block text-sm font-medium">
+      <label className="site-label">
         Электронная почта
-        <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input mt-1.5" placeholder="you@example.com" />
+        <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="site-input" placeholder="you@example.com" />
       </label>
-      <label className="mt-4 block text-sm font-medium">
-        Пароль
-        <input type="password" required minLength={isRegister ? 8 : 1} autoComplete={isRegister ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="input mt-1.5" placeholder={isRegister ? "Не менее 8 символов" : "Ваш пароль"} />
-      </label>
-      {error && <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-      <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
+      <label className="site-label" htmlFor="password">Пароль</label>
+      <div className="password-field">
+        <input id="password" type={showPassword ? "text" : "password"} required minLength={isRegister ? 8 : 1} autoComplete={isRegister ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="site-input" placeholder={isRegister ? "Не менее 8 символов" : "Ваш пароль"} />
+        <button type="button" onClick={() => setShowPassword((v) => !v)} className="icon-button password-toggle" aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"} aria-pressed={showPassword}>{showPassword ? <EyeSlash size={20} aria-hidden /> : <Eye size={20} aria-hidden />}</button>
+      </div>
+      {error && <p className="site-alert" role="alert">{error}</p>}
+      <button type="submit" disabled={busy} className="site-btn site-btn--dark site-btn--full form-submit">
         {busy ? "Секунду…" : isRegister ? "Зарегистрироваться" : "Войти"}
+        <ArrowRight size={18} aria-hidden />
       </button>
-      <p className="mt-5 text-center text-sm text-mist/65">
+      <p className="auth-switch">
         {isRegister ? (
-          <>Уже есть аккаунт? <Link href={`/login${months ? `?months=${months}&devices=${devices ?? ""}` : ""}`} className="text-accent">Войти</Link></>
+          <>Уже есть аккаунт? <Link href={`/login${months ? `?months=${months}&devices=${devices ?? ""}` : ""}`} className="site-link">Войти</Link></>
         ) : (
-          <>Нет аккаунта? <Link href="/register" className="text-accent">Зарегистрироваться</Link></>
+          <>Нет аккаунта? <Link href="/register" className="site-link">Зарегистрироваться</Link></>
         )}
       </p>
       {isRegister && (
-        <p className="mt-4 text-center text-xs text-mist/50">
-          Нажимая кнопку, вы принимаете <Link href="/legal" className="underline">условия оферты</Link>.
+        <p className="auth-legal">
+          Нажимая кнопку, вы принимаете <Link href="/legal" className="site-link">условия оферты</Link>.
         </p>
       )}
     </form>

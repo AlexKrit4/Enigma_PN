@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { ArrowUpRight, List, X } from "@phosphor-icons/react";
+import Brand from "./Brand";
 import { getToken } from "@/lib/siteApi";
-
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Enigma_PN";
 
 export default function Header() {
   const [authed, setAuthed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     const sync = () => setAuthed(Boolean(getToken()));
     sync();
@@ -20,26 +22,41 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-white/10 bg-ink/70 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 text-accent">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" /><path d="m9 12 2 2 4-4" /></svg>
-          </span>
-          <span className="font-display text-lg font-semibold tracking-tight">{BRAND}</span>
-        </Link>
-        <nav className="flex items-center gap-1 text-sm">
-          <Link href="/#price" className="nav-link hidden sm:inline-flex">Цена</Link>
-          <Link href="/setup" className="nav-link hidden sm:inline-flex">Как подключить</Link>
-          {authed ? (
-            <Link href="/cabinet" className="btn-primary ml-2 !px-4 !py-2 !text-sm">Личный кабинет</Link>
-          ) : (
-            <>
-              <Link href="/login" className="nav-link">Войти</Link>
-              <Link href="/register" className="btn-primary ml-2 !px-4 !py-2 !text-sm">Попробовать</Link>
-            </>
-          )}
+    <header className="site-header">
+      <div className="site-container header-inner">
+        <Brand />
+        <nav className="header-nav" aria-label="Основная навигация">
+          <Link href="/#price">Тариф</Link>
+          <Link href="/setup">Как подключить</Link>
+          <Link href="/#questions">Вопросы и ответы</Link>
         </nav>
+        <div className="header-actions">
+          {!authed && <Link href="/login" className="header-login">Войти</Link>}
+          <Link href={authed ? "/cabinet" : "/register"} className="site-btn site-btn--dark site-btn--small">
+            <span className="header-cta-label">{authed ? "Личный кабинет" : "Попробовать бесплатно"}</span>
+            <span className="header-cta-short">{authed ? "Кабинет" : "Начать"}</span>
+            <ArrowUpRight size={15} aria-hidden />
+          </Link>
+          <Dialog.Root open={menuOpen} onOpenChange={setMenuOpen}>
+            <Dialog.Trigger className="mobile-trigger" aria-label="Открыть меню"><List size={24} /></Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="site-menu-overlay" />
+              <Dialog.Content className="website site-menu" aria-describedby={undefined}>
+                <div className="menu-title">
+                  <Dialog.Title>Меню</Dialog.Title>
+                  <Dialog.Close className="icon-button" aria-label="Закрыть меню"><X size={24} /></Dialog.Close>
+                </div>
+                <nav className="menu-links" aria-label="Мобильная навигация">
+                  <Link href="/" onClick={() => setMenuOpen(false)}>Главная</Link>
+                  <Link href="/#price" onClick={() => setMenuOpen(false)}>Тариф</Link>
+                  <Link href="/setup" onClick={() => setMenuOpen(false)}>Как подключить</Link>
+                  <Link href="/#questions" onClick={() => setMenuOpen(false)}>Вопросы и ответы</Link>
+                  <Link href={authed ? "/cabinet" : "/login"} onClick={() => setMenuOpen(false)}>{authed ? "Личный кабинет" : "Войти"}</Link>
+                </nav>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </div>
       </div>
     </header>
   );

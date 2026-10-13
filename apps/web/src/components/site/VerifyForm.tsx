@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ArrowRight } from "@phosphor-icons/react";
 import { setToken, siteApi } from "@/lib/siteApi";
 
 const RESEND_SECONDS = 60;
@@ -63,12 +64,13 @@ export default function VerifyForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="card w-full max-w-md p-7 sm:p-9">
-      <h1 className="font-display text-3xl font-semibold">Подтвердите почту</h1>
-      <p className="mt-2 text-sm text-mist/65">
-        Мы отправили код на <span className="font-medium text-mist">{email}</span>. Введите его — и пробный период на 3 дня активируется.
+    <form onSubmit={onSubmit} className="auth-form">
+      <div className="auth-step" aria-label="Шаг 2 из 2: подтверждение почты"><span className="is-current" /><span className="is-current" /></div>
+      <h1>Проверьте почту</h1>
+      <p className="auth-description">
+        Мы отправили код на <strong>{email}</strong>. Введите его — и пробный период на 3 дня активируется.
       </p>
-      <label className="mt-7 block text-sm font-medium">
+      <label className="site-label">
         Код из письма
         <input
           inputMode="numeric"
@@ -76,29 +78,30 @@ export default function VerifyForm() {
           required
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/[^\d]/g, "").slice(0, 8))}
-          className="input mt-1.5 text-center font-display text-2xl tracking-[0.4em]"
+          className="site-input code-input"
           placeholder="000000"
         />
       </label>
-      {error && <p className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-      {notice && <p className="mt-4 rounded-xl bg-accent/10 px-4 py-3 text-sm text-mist">{notice}</p>}
-      <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
+      {error && <p className="site-alert" role="alert">{error}</p>}
+      {notice && <p className="site-alert site-alert--success" role="status">{notice}</p>}
+      <button type="submit" disabled={busy} className="site-btn site-btn--dark site-btn--full form-submit">
         {busy ? "Секунду…" : "Подтвердить"}
+        <ArrowRight size={18} aria-hidden />
       </button>
-      <p className="mt-5 text-center text-sm text-mist/65">
+      <p className="auth-switch">
         {cooldown > 0 ? (
           <>Не пришёл код? Отправить снова можно через {cooldown} с.</>
         ) : (
           <>
             Не пришёл код?{" "}
-            <button type="button" onClick={resend} className="text-accent">
+            <button type="button" onClick={resend} className="site-link">
               Отправить снова
             </button>
           </>
         )}
       </p>
-      <p className="mt-4 text-center text-xs text-mist/50">
-        Указали другую почту? <Link href="/register" className="underline">Зарегистрироваться заново</Link>
+      <p className="auth-legal">
+        Указали другую почту? <Link href="/register" className="site-link">Зарегистрироваться заново</Link>
       </p>
     </form>
   );

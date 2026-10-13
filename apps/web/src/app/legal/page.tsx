@@ -1,5 +1,4 @@
-import Footer from "@/components/site/Footer";
-import Header from "@/components/site/Header";
+import SiteShell from "@/components/site/SiteShell";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Enigma_PN";
 const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN || "bigwinzone.ru";
@@ -8,12 +7,14 @@ export const metadata = { title: "Оферта и конфиденциально
 
 export default function LegalPage() {
   return (
-    <>
-      <Header />
-      <main className="mx-auto w-full max-w-3xl px-5 py-14 text-mist">
-        <h1 className="font-display text-4xl font-semibold">Публичная оферта</h1>
-        <p className="mt-3 text-sm text-mist/60">Сервис {BRAND}, сайт {DOMAIN}</p>
-        <div className="mt-10 space-y-4 text-sm leading-7 text-mist/80">
+    <SiteShell>
+      <main id="main" className="site-container legal-layout">
+        <nav className="legal-nav" aria-label="Разделы документа"><a href="#offer">Публичная оферта</a><a href="#privacy">Конфиденциальность</a></nav>
+        <article className="legal-document">
+        <div className="site-eyebrow" style={{ marginBottom: 20 }}>УСЛОВИЯ СЕРВИСА</div>
+        <h1 id="offer">Публичная оферта</h1>
+        <p>Сервис {BRAND}, сайт {DOMAIN}</p>
+        <div className="legal-copy">
           <p>1. Исполнитель предоставляет Пользователю доступ к сервису защищённого соединения (подписка для приложения Happ) на условиях тарифа «Обход белых списков».</p>
           <p>2. В тариф входят безлимитный трафик и 5 устройств. Стоимость: 1 месяц — 200 ₽, 3 месяца — 550 ₽, 6 месяцев — 1050 ₽, 12 месяцев — 2000 ₽. Каждое дополнительное устройство — 20 ₽ в месяц за весь оплаченный срок.</p>
           <p>3. Оплата производится через ЮMoney. Доступ активируется автоматически после подтверждения платежа. При продлении новый срок прибавляется к текущему.</p>
@@ -23,14 +24,14 @@ export default function LegalPage() {
           <p>7. Возврат средств за неиспользованный период возможен по обращению в поддержку в течение 7 дней с момента оплаты, если сервис не работал на устройстве Пользователя и проблему не удалось устранить.</p>
         </div>
 
-        <h2 className="font-display mt-14 text-3xl font-semibold">Конфиденциальность</h2>
-        <div className="mt-6 space-y-4 text-sm leading-7 text-mist/80">
+        <h2 id="privacy">Конфиденциальность</h2>
+        <div className="legal-copy">
           <p>Мы храним только адрес электронной почты, зашифрованный пароль, сведения о подписке и платежах, а также технические идентификаторы устройств, нужные для учёта лимита. Содержимое вашего трафика и история посещённых сайтов не записываются.</p>
           <p>Платёжные данные обрабатываются сервисом ЮMoney; номера карт на нашей стороне не хранятся.</p>
           <p>Данные не передаются третьим лицам, кроме случаев, предусмотренных законом. Удалить аккаунт можно по запросу в поддержку.</p>
         </div>
+        </article>
       </main>
-      <Footer />
-    </>
+    </SiteShell>
   );
 }

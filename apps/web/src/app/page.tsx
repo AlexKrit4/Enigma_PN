@@ -1,126 +1,97 @@
 import Link from "next/link";
-import Footer from "@/components/site/Footer";
-import Header from "@/components/site/Header";
+import { ArrowRight, ArrowUpRight, Check, DeviceMobile, GlobeHemisphereWest, ShieldCheck, LockSimple, Info, AndroidLogo, AppleLogo, WindowsLogo, Television, EnvelopeSimple, DownloadSimple, PlugsConnected } from "@phosphor-icons/react/dist/ssr";
+import SiteShell from "@/components/site/SiteShell";
+import ConnectionArtwork from "@/components/site/ConnectionArtwork";
 import PriceCalculator from "@/components/site/PriceCalculator";
+import FAQ from "@/components/site/FAQ";
 
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Enigma_PN";
-
-const steps = [
-  { n: "01", title: "Зарегистрируйтесь", text: "Почта и пароль, затем подтверждение кодом из письма. Сразу получите 3 дня доступа бесплатно — проверьте, что всё работает именно у вас." },
-  { n: "02", title: "Установите Happ", text: "Бесплатное приложение для Android, iPhone, Windows, macOS и телевизоров. Ссылки — в личном кабинете." },
-  { n: "03", title: "Нажмите «Добавить в Happ»", text: "Подписка добавится сама. Выбираете сервер, включаете — готово. Никаких ручных настроек." },
-];
-
-const faq = [
-  { q: "Что такое «белые списки» и почему другие VPN не работают?", a: "На некоторых сетях провайдер пропускает трафик только к разрешённым российским сайтам. Обычные VPN-серверы за рубежом туда не входят, поэтому соединение просто не устанавливается. Наш вход расположен в России и выглядит для провайдера как обычный российский сайт, поэтому проходит." },
-  { q: "Будет ли работать на мобильном интернете и домашнем Wi-Fi?", a: "Да. В подписке два подключения: обычное через Финляндию и «Обход» для сетей с ограничениями. Если одно не подходит для вашей сети — переключитесь на второе прямо в Happ." },
-  { q: "Как считаются устройства?", a: "Устройство — это телефон, компьютер или телевизор, на котором добавлена подписка. В тариф входит 5 устройств, каждое следующее — 20 ₽ в месяц. Список устройств и кнопка «отключить» есть в кабинете." },
-  { q: "Есть ограничение трафика или скорости?", a: "Нет. Трафик безлимитный, скорость ограничена только вашим интернетом." },
-  { q: "Как оплатить?", a: "Через ЮMoney: банковской картой или кошельком. Подписка активируется автоматически в течение минуты после оплаты." },
-];
+const SUPPORT = process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM || "alexkr1t";
 
 export default function HomePage() {
   return (
-    <>
-      <Header />
-      <main>
-        <section className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-hero" />
-          <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 pb-20 pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:pt-24">
-            <div className="animate-rise">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-mist/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Работает там, где остальные молчат
-              </div>
-              <h1 className="font-display mt-6 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-                VPN, который проходит через белые списки
-              </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-mist/75">
-                {BRAND} подключается даже в сетях, где провайдер разрешает только российские сайты. Один тариф, безлимитный трафик, пять устройств. Настройка — одно нажатие в приложении Happ.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/register" className="btn-primary">Попробовать 3 дня бесплатно</Link>
-                <Link href="#price" className="btn-ghost">Смотреть цену</Link>
-              </div>
-              <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/10 pt-8">
-                <div><dt className="text-xs text-mist/55">Трафик</dt><dd className="font-display mt-1 text-2xl">∞</dd></div>
-                <div><dt className="text-xs text-mist/55">Устройств</dt><dd className="font-display mt-1 text-2xl">5+</dd></div>
-                <div><dt className="text-xs text-mist/55">Цена</dt><dd className="font-display mt-1 text-2xl">от 167 ₽</dd></div>
-              </dl>
+    <SiteShell>
+      <main id="main">
+        <section className="site-container hero">
+          <div>
+            <div className="site-eyebrow">VPN ДЛЯ ВАШЕГО ПОВСЕДНЕВНОГО ИНТЕРНЕТА</div>
+            <h1>Интернет.<br />Без закрытых <span>дверей.</span></h1>
+            <p className="hero-description">Ваши сайты, приложения и видео — даже в сетях с белыми списками. Один VPN для телефона, ноутбука и всех ваших устройств.</p>
+            <div className="hero-actions">
+              <Link href="/register" className="site-btn site-btn--dark">3 дня бесплатно <ArrowUpRight size={18} aria-hidden /></Link>
+              <Link href="#price" className="site-link">Выбрать тариф</Link>
             </div>
-            <div id="price" className="animate-rise scroll-mt-24 [animation-delay:150ms]">
-              <PriceCalculator />
-            </div>
+            <div className="hero-note"><Check size={14} aria-hidden /> Без карты. Просто подтвердите почту.</div>
           </div>
+          <ConnectionArtwork />
         </section>
-
-        <section className="mx-auto w-full max-w-6xl px-5 py-20">
-          <div className="max-w-2xl">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Как это работает</div>
-            <h2 className="font-display mt-3 text-3xl font-semibold sm:text-4xl">Три шага до подключения</h2>
+        <div className="site-container facts">
+          <div className="fact"><strong>05</strong><span>устройств<br />в одной подписке</span></div>
+          <div className="fact"><strong>∞</strong><span>трафик<br />без ограничений</span></div>
+          <div className="fact"><strong>200 ₽</strong><span>стоимость<br />за один месяц</span></div>
+          <div className="fact"><strong>03</strong><span>дня бесплатно<br />для знакомства</span></div>
+        </div>
+        <section className="site-container site-section">
+          <div className="section-top">
+            <div><div className="site-eyebrow">НЕ ОДИН ПУТЬ, А ДВА</div><h2>В обычной сети.<br />И там, где сложнее.</h2></div>
+            <p>В одной подписке — основное подключение и отдельный маршрут для белых списков. Переключайтесь между ними прямо в Happ.</p>
           </div>
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {steps.map((s) => (
-              <div key={s.n} className="card p-6">
-                <div className="font-display text-sm text-copper">{s.n}</div>
-                <h3 className="mt-3 text-lg font-semibold">{s.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-mist/70">{s.text}</p>
-              </div>
-            ))}
+          <div className="route-grid">
+            <article className="route">
+              <div className="route-title"><h3>Обычное подключение</h3><span className="route-label">Finland</span></div>
+              <div className="route-path" aria-hidden="true"><div className="route-node"><DeviceMobile size={24} /></div><div className="route-line" /><div className="route-node route-node--accent"><ShieldCheck size={24} /></div><div className="route-line" /><div className="route-node"><GlobeHemisphereWest size={26} /></div></div>
+              <p>Для Wi-Fi и мобильного интернета без белых списков. Выберите сервер Finland и подключитесь.</p>
+            </article>
+            <article className="route route--bypass">
+              <div className="route-title"><h3>Обход ограничений</h3><span className="route-label">Обход</span></div>
+              <div className="route-path" aria-hidden="true"><div className="route-node"><DeviceMobile size={24} /></div><div className="route-line" /><div className="route-node route-node--accent"><PlugsConnected size={24} /></div><div className="route-line" /><div className="route-node"><GlobeHemisphereWest size={26} /></div></div>
+              <p>Когда обычное соединение не устанавливается, переключитесь на «Обход». Он рассчитан на сети с белыми списками.</p>
+            </article>
           </div>
+          <p className="route-caveat"><Info size={16} aria-hidden /> Ограничения у провайдеров отличаются. Проверьте свою сеть в бесплатном пробном периоде.</p>
         </section>
-
-        <section className="border-y border-white/10 bg-white/[0.02]">
-          <div className="mx-auto grid w-full max-w-6xl gap-10 px-5 py-20 lg:grid-cols-2">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Почему проходит</div>
-              <h2 className="font-display mt-3 text-3xl font-semibold sm:text-4xl">Для сети это обычный российский сайт</h2>
-              <p className="mt-5 leading-relaxed text-mist/75">
-                Вход в сеть расположен в российском дата-центре и защищён так же, как любой сайт с сертификатом. Провайдер видит привычное соединение и пропускает его. Дальше трафик идёт на наши серверы за рубежом — вы получаете открытый интернет.
-              </p>
-              <ul className="mt-6 space-y-3 text-sm text-mist/80">
-                {["Два подключения в одной подписке: обычное и «Обход»", "Протокол без заметных признаков VPN", "Подписка обновляется автоматически — новые серверы появятся сами"].map((t) => (
-                  <li key={t} className="flex gap-3"><span className="mt-1 h-4 w-4 shrink-0 rounded-full bg-accent/20 text-center text-[10px] leading-4 text-accent">✓</span>{t}</li>
-                ))}
+        <section id="price" className="site-section pricing-section">
+          <div className="site-container pricing-grid">
+            <div className="pricing-intro">
+              <div className="site-eyebrow">ПОНЯТНАЯ ЦЕНА</div>
+              <h2>Платите за время.<br />Не за гигабайты.</h2>
+              <p>Один тариф, всё включено. Выберите срок и количество устройств — итоговая цена сразу перед вами.</p>
+              <ul className="included-list">
+                <li><Check size={18} aria-hidden /> Обход белых списков</li>
+                <li><Check size={18} aria-hidden /> 5 устройств и безлимитный трафик</li>
+                <li><Check size={18} aria-hidden /> Все доступные серверы</li>
+                <li><Check size={18} aria-hidden /> Дополнительное устройство — 20 ₽ / месяц</li>
               </ul>
+              <div className="trial-note"><LockSimple size={22} aria-hidden /><div><strong>Сначала попробуйте. Потом решайте.</strong><p>3 дня бесплатно после подтверждения почты. Без привязки карты.</p></div></div>
             </div>
-            <div className="card p-6 sm:p-8">
-              <div className="text-sm font-semibold">Поддерживаемые устройства</div>
-              <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                {["Android", "iPhone / iPad", "Windows", "macOS", "Android TV", "Apple TV"].map((d) => (
-                  <div key={d} className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-mist/85">{d}</div>
-                ))}
-              </div>
-              <p className="mt-5 text-sm text-mist/60">Подключение через бесплатное приложение Happ. Подробная инструкция — <Link href="/setup" className="text-accent">здесь</Link>.</p>
-            </div>
+            <PriceCalculator />
           </div>
         </section>
-
-        <section className="mx-auto w-full max-w-3xl px-5 py-20">
-          <h2 className="font-display text-3xl font-semibold sm:text-4xl">Вопросы и ответы</h2>
-          <div className="mt-8 divide-y divide-white/10">
-            {faq.map((f) => (
-              <details key={f.q} className="group py-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium">
-                  {f.q}
-                  <span className="text-mist/50 transition group-open:rotate-45">+</span>
-                </summary>
-                <p className="mt-3 text-sm leading-relaxed text-mist/70">{f.a}</p>
-              </details>
-            ))}
+        <section className="site-container site-section">
+          <div className="section-top">
+            <div><div className="site-eyebrow">ОТ АККАУНТА ДО ПОДКЛЮЧЕНИЯ</div><h2>Меньше настройки.<br />Больше интернета.</h2></div>
+            <p>Никаких конфигурационных файлов и сложных параметров. Нужны почта, бесплатное приложение Happ и пара нажатий.</p>
+          </div>
+          <div className="steps-grid">
+            <article><div className="step-number"><span>01 / АККАУНТ</span><EnvelopeSimple size={24} aria-hidden /></div><h3>Подтвердите почту</h3><p>Зарегистрируйтесь и введите код из письма. Пробный период начнётся сразу.</p></article>
+            <article><div className="step-number"><span>02 / ПРИЛОЖЕНИЕ</span><DownloadSimple size={24} aria-hidden /></div><h3>Установите Happ</h3><p>Бесплатное приложение для вашего устройства. Ссылки есть в <Link href="/setup" className="site-link">инструкции</Link>.</p></article>
+            <article><div className="step-number"><span>03 / ПОДКЛЮЧЕНИЕ</span><GlobeHemisphereWest size={24} aria-hidden /></div><h3>Добавьте подписку</h3><p>Нажмите «Добавить в Happ» в кабинете, выберите сервер и подключитесь.</p></article>
+          </div>
+          <div className="platform-strip">
+            <span>На устройствах, которыми вы пользуетесь</span>
+            <div><AndroidLogo size={20} aria-hidden />Android</div><div><AppleLogo size={20} aria-hidden />iOS / macOS</div><div><WindowsLogo size={20} aria-hidden />Windows</div><div><Television size={20} aria-hidden />Android TV</div>
           </div>
         </section>
-
-        <section className="mx-auto w-full max-w-6xl px-5 pb-24">
-          <div className="card flex flex-col items-start justify-between gap-6 p-8 sm:flex-row sm:items-center sm:p-10">
-            <div>
-              <h2 className="font-display text-2xl font-semibold sm:text-3xl">Попробуйте бесплатно — 3 дня</h2>
-              <p className="mt-2 text-mist/70">Три дня доступа после регистрации, карта не нужна.</p>
-            </div>
-            <Link href="/register" className="btn-primary shrink-0">Начать</Link>
+        <section id="questions" className="site-section faq-section">
+          <div className="site-container faq-grid">
+            <div className="faq-intro"><div className="site-eyebrow">БЕЗ МЕЛКОГО ШРИФТА</div><h2>Хорошие вопросы.<br />Прямые ответы.</h2><p>Не нашли свой ответ?<br /><a className="site-link" href={`https://t.me/${SUPPORT.replace(/^@/, "")}`} target="_blank" rel="noreferrer">Напишите нам в Telegram <ArrowUpRight size={14} style={{ display: "inline" }} aria-hidden /></a></p></div>
+            <FAQ />
           </div>
+        </section>
+        <section className="site-container final-cta">
+          <div><h2>Откройте свой интернет.</h2><p>3 дня, чтобы проверить всё на своих устройствах. Бесплатно.</p></div>
+          <Link href="/register" className="site-btn site-btn--dark">Начать с 3 дней бесплатно <ArrowRight size={18} aria-hidden /></Link>
         </section>
       </main>
-      <Footer />
-    </>
+    </SiteShell>
   );
 }

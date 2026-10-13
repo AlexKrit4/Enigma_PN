@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Check, CreditCard, ArrowUpRight, WarningCircle } from "@phosphor-icons/react";
 import { formatRub, getToken, siteApi, type Order } from "@/lib/siteApi";
 
 export default function PaymentStatus({ orderId }: { orderId: string }) {
@@ -34,40 +35,44 @@ export default function PaymentStatus({ orderId }: { orderId: string }) {
 
   if (error && !order) {
     return (
-      <div className="card w-full max-w-md p-8 text-center">
-        <p className="text-mist/80">{error}</p>
-        <Link href="/cabinet" className="btn-ghost mt-6">В личный кабинет</Link>
+      <div className="payment-panel">
+        <div className="payment-icon"><WarningCircle size={28} aria-hidden /></div>
+        <h1>Не удалось загрузить заказ</h1>
+        <p role="alert">{error}</p>
+        <Link href="/cabinet" className="site-btn site-btn--outline site-btn--full form-submit">В личный кабинет</Link>
       </div>
     );
   }
-  if (!order) return <div className="text-mist/60">Загружаем заказ…</div>;
+  if (!order) return <div className="loading-state" role="status">Загружаем заказ…</div>;
 
   if (order.status === "paid") {
     return (
-      <div className="card w-full max-w-md p-8 text-center">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-accent/15 text-2xl text-accent">✓</div>
-        <h1 className="font-display mt-5 text-3xl font-semibold">Оплата прошла</h1>
-        <p className="mt-2 text-mist/70">{order.title}. Подписка уже активна — осталось добавить её в Happ.</p>
-        <Link href="/cabinet" className="btn-primary mt-7 w-full">Перейти в кабинет</Link>
+      <div className="payment-panel" role="status">
+        <div className="payment-icon payment-icon--success"><Check size={28} aria-hidden /></div>
+        <div className="site-eyebrow">ВСЁ ГОТОВО</div>
+        <h1>Оплата прошла.</h1>
+        <p>{order.title}. Подписка уже активна — осталось добавить её в Happ.</p>
+        <Link href="/cabinet" className="site-btn site-btn--dark site-btn--full form-submit">Перейти в кабинет <ArrowUpRight size={18} aria-hidden /></Link>
       </div>
     );
   }
 
   return (
-    <div className="card w-full max-w-md p-8">
-      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-copper">Ожидаем оплату</div>
-      <h1 className="font-display mt-3 text-3xl font-semibold">{formatRub(order.amount)}</h1>
-      <p className="mt-2 text-sm text-mist/70">{order.title}</p>
-      <p className="mt-6 text-sm leading-relaxed text-mist/70">
+    <div className="payment-panel">
+      <div className="payment-icon"><CreditCard size={28} aria-hidden /></div>
+      <div className="site-eyebrow">ОЖИДАЕМ ОПЛАТУ</div>
+      <h1>{formatRub(order.amount)}</h1>
+      <p>{order.title}</p>
+      <p>
         Оплата проходит на сайте ЮMoney. После оплаты эта страница обновится сама — обычно в течение минуты. Вкладку можно не закрывать.
       </p>
       {order.payment_url && (
-        <a href={order.payment_url} className="btn-primary mt-6 w-full">Перейти к оплате</a>
+        <a href={order.payment_url} className="site-btn site-btn--dark site-btn--full form-submit">Перейти к оплате <ArrowUpRight size={18} aria-hidden /></a>
       )}
-      <div className="mt-4 flex items-center justify-center gap-2 text-xs text-mist/50">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-copper" /> Проверяем статус платежа…
+      <div className="payment-poll" role="status">
+        <span className="status-dot" /> Проверяем статус платежа…
       </div>
-      <Link href="/cabinet" className="mt-5 block text-center text-sm text-mist/60 hover:text-mist">Вернуться в кабинет</Link>
+      <Link href="/cabinet" className="payment-back site-link">Вернуться в кабинет</Link>
     </div>
   );
 }

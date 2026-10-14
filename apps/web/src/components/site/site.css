@@ -65,12 +65,21 @@
 .website .art-stamp { font: 20px "IBM Plex Mono", monospace; letter-spacing: -.12em; padding: 6px 7px; border: 1px solid #252622; white-space: nowrap; }
 .website .art-bottom p { font-size: 13px; line-height: 1.4; font-weight: 500; margin-right: auto; }
 .website .art-arrow { display: flex; align-items: center; font-size: 38px; line-height: 1; }
-.website .admin-stats { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); margin-bottom: 28px; }
-.website .admin-stat { padding: 22px 18px; border-right: 1px solid var(--site-line); display: flex; flex-direction: column; gap: 6px; }
-.website .admin-stat:first-child { padding-left: 0; }
-.website .admin-stat:last-child { border-right: 0; }
-.website .admin-stat strong { font: 500 30px/1 "Golos Text", sans-serif; letter-spacing: -.04em; white-space: nowrap; }
+.website .admin-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-bottom: 28px; }
+.website .admin-stat { padding: 20px 16px; border: 1px solid var(--site-line); margin: -1px 0 0 -1px; display: flex; flex-direction: column; gap: 6px; }
+.website .admin-stat strong { font: 500 28px/1 "Golos Text", sans-serif; letter-spacing: -.04em; white-space: nowrap; }
 .website .admin-stat span { font-size: 11px; line-height: 1.4; color: var(--site-muted); }
+.website .funnel { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.website .funnel-row { display: grid; grid-template-columns: 190px 1fr 120px; gap: 14px; align-items: center; }
+.website .funnel-label { font-size: 13px; color: var(--site-muted); }
+.website .funnel-bar { height: 22px; border: 1px solid var(--site-line); background: var(--site-white); }
+.website .funnel-fill { height: 100%; background: var(--site-orange); }
+.website .funnel-value { font: 12px "IBM Plex Mono", monospace; text-align: right; white-space: nowrap; }
+.website .admin-chart { display: flex; align-items: flex-end; gap: 3px; height: 140px; border-bottom: 1px solid var(--site-line); }
+.website .admin-chart-bar { flex: 1; min-width: 4px; }
+.website .admin-chart-bar.is-filled { background: var(--site-orange); }
+.website .admin-chart-bar:not(.is-filled) { border-top: 1px solid var(--site-line); }
+.website .admin-tg { margin-left: 6px; color: var(--site-muted); vertical-align: -2px; }
 .website .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); }
 .website .fact { padding: 27px 28px; border-right: 1px solid var(--site-line); display: flex; gap: 18px; align-items: center; }
 .website .fact:first-child { padding-left: 0; }
@@ -296,12 +305,9 @@
   .website .art-bottom p { font-size: 11px; }
   .website .fact { flex-direction: column; align-items: flex-start; gap: 8px; }
   .website .fact span br { display: none; }
-  .website .admin-stats { grid-template-columns: repeat(3, 1fr); }
-  .website .admin-stat:nth-child(-n+3) { border-bottom: 1px solid var(--site-line); }
-  .website .admin-stat:nth-child(3n) { border-right: 0; }
-  .website .admin-stat { padding: 18px 14px; }
-  .website .admin-stat:first-child { padding-left: 14px; }
+  .website .admin-stat { padding: 16px 12px; }
   .website .admin-stat strong { font-size: 24px; }
+  .website .funnel-row { grid-template-columns: 140px 1fr 100px; gap: 10px; }
   .website .site-section { padding-block: 70px; }
   .website .pricing-grid { gap: 32px; }
   .website .price-calculator { padding: 20px; }
@@ -340,10 +346,8 @@
   .website .art-caption { font-size: 9px; }
   .website .art-bottom p { font-size: 12px; }
   .website .facts { grid-template-columns: 1fr 1fr; }
-  .website .admin-stats { grid-template-columns: 1fr 1fr; }
-  .website .admin-stat:nth-child(3n) { border-right: 1px solid var(--site-line); }
-  .website .admin-stat:nth-child(2n) { border-right: 0; }
-  .website .admin-stat:nth-child(-n+4) { border-bottom: 1px solid var(--site-line); }
+  .website .funnel-row { grid-template-columns: 1fr; gap: 6px; }
+  .website .funnel-value { text-align: left; }
   .website .fact { flex-direction: row; align-items: center; gap: 16px; padding: 20px 14px; }
   .website .fact:first-child { padding-left: 14px; }
   .website .fact:nth-child(2) { border-right: 0; }

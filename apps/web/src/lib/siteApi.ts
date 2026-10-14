@@ -39,10 +39,24 @@ export type Me = {
 export type AdminOverview = {
   users_site: number;
   users_verified: number;
+  users_bot: number;
+  users_new_7d: number;
+  users_new_30d: number;
+  site_users_with_sub: number;
+  paying_site_users: number;
   subscriptions_active: number;
+  subscriptions_trial: number;
+  subscriptions_paid: number;
+  subscriptions_expiring_3d: number;
   orders_paid: number;
-  revenue_rub: string;
   orders_pending: number;
+  orders_failed: number;
+  paying_users: number;
+  revenue_rub: string;
+  revenue_7d: string;
+  revenue_30d: string;
+  avg_check: string;
+  revenue_daily: { day: string; amount: string }[];
 };
 
 export type AdminUser = {
@@ -51,15 +65,31 @@ export type AdminUser = {
   created_at?: string | null;
   email_verified: boolean;
   is_admin: boolean;
-  subscription: { status: string; ends_at: string; days_left: number; device_limit: number } | null;
+  telegram_linked: boolean;
+  orders_paid: number;
+  total_paid: string;
+  last_sub_ends_at?: string | null;
+  subscription: {
+    status: string;
+    ends_at: string;
+    days_left: number;
+    device_limit: number;
+    devices_connected: number;
+    traffic_used_gb: string;
+  } | null;
 };
 
 export type AdminPayment = {
   id: string;
+  user: string;
   email: string | null;
   amount: string;
   currency: string;
+  status: string;
   title?: string | null;
+  kind?: string | null;
+  duration_days?: number | null;
+  device_limit?: number | null;
   provider: string;
   created_at?: string | null;
   paid_at?: string | null;
@@ -182,7 +212,8 @@ export const siteApi = {
   kickDevice: (id: string) => request<unknown>(`/api/v1/me/devices/${id}`, { method: "DELETE" }),
   adminOverview: () => request<AdminOverview>("/api/v1/site/admin/overview"),
   adminUsers: () => request<AdminUser[]>("/api/v1/site/admin/users"),
-  adminPayments: () => request<AdminPayment[]>("/api/v1/site/admin/payments"),
+  adminPayments: (status: "paid" | "pending" | "failed" = "paid") =>
+    request<AdminPayment[]>(`/api/v1/site/admin/payments?status=${status}`),
 };
 
 export function formatRub(value: number | string): string {

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 from math import ceil
 import secrets
@@ -15,7 +15,15 @@ import structlog
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.deps import create_access_token, get_current_user, require_admin
-from app.models.entities import Order, OrderStatus, Plan, Subscription, SubscriptionStatus, User
+from app.models.entities import (
+    Order,
+    OrderStatus,
+    Plan,
+    Subscription,
+    SubscriptionDevice,
+    SubscriptionStatus,
+    User,
+)
 from app.schemas import (
     SiteDevicesOrderIn,
     SiteLoginIn,
@@ -405,16 +413,42 @@ async def site_admin_overview(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
     site_users = await db.scalar(select(func.count(User.id)).where(User.email.isnot(None)))
     verified = await db.scalar(
         select(func.count(User.id)).where(User.email.isnot(None), User.email_verified.is_(True))
     )
-    active_subs = await db.scalar(
+    new_7d = await db.scalar(
+        select(func.count(User.id)).where(User.email.isnot(None), User.created_at >= week_ago)
+    )
+    new_30d = await db.scalar(
+        select(func.count(User.id)).where(User.email.isnot(None), User.created_at >= month_ago)
+    )
+    bot_users = await db.scalar(select(func.count(User.id)).where(User.telegram_id.isnot(None)))
+
+    active_filter = [
+        Subscription.status.in_([SubscriptionStatus.trial, SubscriptionStatus.active]),
+        Subscription.ends_at > now,
+    ]
+    active_subs = await db.scalar(select(func.count(Subscription.id)).where(*active_filter))
+    trial_subs = await db.scalar(
         select(func.count(Subscription.id)).where(
-            Subscription.status.in_([SubscriptionStatus.trial, SubscriptionStatus.active]),
-            Subscription.ends_at > now,
+            Subscription.status == SubscriptionStatus.trial, Subscription.ends_at > now
         )
     )
+    paid_subs = await db.scalar(
+        select(func.count(Subscription.id)).where(
+            Subscription.status == SubscriptionStatus.active, Subscription.ends_at > now
+        )
+    )
+    expiring_3d = await db.scalar(
+        select(func.count(Subscription.id)).where(
+            *active_filter, Subscription.ends_at <= now + timedelta(days=3)
+        )
+    )
+
     paid_count, paid_sum = (
         await db.execute(
             select(func.count(Order.id), func.coalesce(func.sum(Order.amount), 0)).where(
@@ -422,16 +456,71 @@ async def site_admin_overview(
             )
         )
     ).one()
+    paid_count = paid_count or 0
+    revenue_7d = await db.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0)).where(
+            Order.status == OrderStatus.paid, Order.paid_at >= week_ago
+        )
+    )
+    revenue_30d = await db.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0)).where(
+            Order.status == OrderStatus.paid, Order.paid_at >= month_ago
+        )
+    )
     pending = await db.scalar(
         select(func.count(Order.id)).where(Order.status == OrderStatus.pending)
     )
+    failed = await db.scalar(
+        select(func.count(Order.id)).where(Order.status == OrderStatus.failed)
+    )
+    paying_users = await db.scalar(
+        select(func.count(func.distinct(Order.user_id))).where(Order.status == OrderStatus.paid)
+    )
+    paying_site_users = await db.scalar(
+        select(func.count(func.distinct(Order.user_id)))
+        .join(User, Order.user_id == User.id)
+        .where(Order.status == OrderStatus.paid, User.email.isnot(None))
+    )
+    site_users_with_sub = await db.scalar(
+        select(func.count(func.distinct(Subscription.user_id)))
+        .join(User, Subscription.user_id == User.id)
+        .where(User.email.isnot(None), *active_filter)
+    )
+
+    day_col = func.date_trunc("day", Order.paid_at).label("d")
+    daily_rows = (
+        await db.execute(
+            select(day_col, func.sum(Order.amount))
+            .where(Order.status == OrderStatus.paid, Order.paid_at >= month_ago)
+            .group_by(day_col)
+            .order_by(day_col)
+        )
+    ).all()
+    revenue_daily = [
+        {"day": d.date().isoformat(), "amount": str(total)} for d, total in daily_rows
+    ]
+
     return {
         "users_site": site_users or 0,
         "users_verified": verified or 0,
+        "users_bot": bot_users or 0,
+        "users_new_7d": new_7d or 0,
+        "users_new_30d": new_30d or 0,
+        "site_users_with_sub": site_users_with_sub or 0,
+        "paying_site_users": paying_site_users or 0,
         "subscriptions_active": active_subs or 0,
-        "orders_paid": paid_count or 0,
-        "revenue_rub": str(paid_sum or 0),
+        "subscriptions_trial": trial_subs or 0,
+        "subscriptions_paid": paid_subs or 0,
+        "subscriptions_expiring_3d": expiring_3d or 0,
+        "orders_paid": paid_count,
         "orders_pending": pending or 0,
+        "orders_failed": failed or 0,
+        "paying_users": paying_users or 0,
+        "revenue_rub": str(paid_sum or 0),
+        "revenue_7d": str(revenue_7d or 0),
+        "revenue_30d": str(revenue_30d or 0),
+        "avg_check": str(round((paid_sum or 0) / paid_count, 2)) if paid_count else "0",
+        "revenue_daily": revenue_daily,
     }
 
 
@@ -447,9 +536,10 @@ async def site_admin_users(
     users = result.scalars().all()
     if not users:
         return []
+    user_ids = [u.id for u in users]
     sub_result = await db.execute(
         select(Subscription).where(
-            Subscription.user_id.in_([u.id for u in users]),
+            Subscription.user_id.in_(user_ids),
             Subscription.status.in_([SubscriptionStatus.trial, SubscriptionStatus.active]),
             Subscription.ends_at > now,
         )
@@ -458,9 +548,33 @@ async def site_admin_users(
     for s in sub_result.scalars():
         if s.user_id not in subs or s.ends_at > subs[s.user_id].ends_at:
             subs[s.user_id] = s
+    sub_ids = [s.id for s in subs.values()]
+    device_counts: dict[UUID, int] = {}
+    if sub_ids:
+        for sid, cnt in await db.execute(
+            select(SubscriptionDevice.subscription_id, func.count())
+            .where(SubscriptionDevice.subscription_id.in_(sub_ids))
+            .group_by(SubscriptionDevice.subscription_id)
+        ):
+            device_counts[sid] = cnt
+    paid_stats: dict[UUID, tuple[int, float]] = {}
+    for uid, cnt, total in await db.execute(
+        select(Order.user_id, func.count(), func.coalesce(func.sum(Order.amount), 0))
+        .where(Order.user_id.in_(user_ids), Order.status == OrderStatus.paid)
+        .group_by(Order.user_id)
+    ):
+        paid_stats[uid] = (cnt, float(total))
+    last_sub_ends: dict[UUID, datetime] = {}
+    for uid, ends in await db.execute(
+        select(Subscription.user_id, func.max(Subscription.ends_at))
+        .where(Subscription.user_id.in_(user_ids))
+        .group_by(Subscription.user_id)
+    ):
+        last_sub_ends[uid] = ends
     payload = []
     for u in users:
         s = subs.get(u.id)
+        paid_cnt, paid_total = paid_stats.get(u.id, (0, 0.0))
         payload.append(
             {
                 "id": str(u.id),
@@ -468,11 +582,19 @@ async def site_admin_users(
                 "created_at": u.created_at.isoformat() if u.created_at else None,
                 "email_verified": bool(u.email_verified),
                 "is_admin": bool(u.is_admin),
+                "telegram_linked": bool(u.telegram_id),
+                "orders_paid": paid_cnt,
+                "total_paid": str(paid_total),
+                "last_sub_ends_at": (
+                    last_sub_ends[u.id].isoformat() if u.id in last_sub_ends else None
+                ),
                 "subscription": (
                     {
                         "status": s.status.value,
                         "ends_at": s.ends_at.isoformat(),
                         "device_limit": s.device_limit,
+                        "devices_connected": device_counts.get(s.id, 0),
+                        "traffic_used_gb": str(s.traffic_used_gb),
                         "days_left": max(0, ceil((s.ends_at - now).total_seconds() / 86400)),
                     }
                     if s
@@ -485,26 +607,44 @@ async def site_admin_users(
 
 @router.get("/admin/payments")
 async def site_admin_payments(
+    status: str = "paid",
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    try:
+        order_status = OrderStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Unknown order status")
     result = await db.execute(
-        select(Order, User.email)
+        select(Order, User.email, User.telegram_id, User.username)
         .join(User, Order.user_id == User.id)
-        .where(Order.status == OrderStatus.paid)
+        .where(Order.status == order_status)
         .order_by(Order.paid_at.desc().nullslast(), Order.created_at.desc())
-        .limit(200)
+        .limit(300)
     )
     payload = []
-    for order, email in result.all():
+    for order, email, telegram_id, username in result.all():
         meta = order.meta or {}
+        if email:
+            user_label = email
+        elif username:
+            user_label = f"@{username}"
+        elif telegram_id:
+            user_label = f"tg:{telegram_id}"
+        else:
+            user_label = str(order.user_id)
         payload.append(
             {
                 "id": str(order.id),
+                "user": user_label,
                 "email": email,
                 "amount": str(order.amount),
                 "currency": order.currency,
+                "status": order.status.value,
                 "title": meta.get("title"),
+                "kind": meta.get("kind"),
+                "duration_days": meta.get("duration_days"),
+                "device_limit": meta.get("device_limit"),
                 "provider": order.payment_provider,
                 "created_at": order.created_at.isoformat() if order.created_at else None,
                 "paid_at": order.paid_at.isoformat() if order.paid_at else None,

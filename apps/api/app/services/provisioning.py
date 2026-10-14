@@ -156,7 +156,15 @@ async def serialize_subscription_with_devices(
     )
 
 
-async def create_trial(db: AsyncSession, user: User, settings: Settings | None = None) -> Subscription | None:
+async def create_trial(
+    db: AsyncSession,
+    user: User,
+    settings: Settings | None = None,
+    *,
+    traffic_gb: int | None = -1,
+    device_limit: int | None = None,
+    duration_days: int | None = None,
+) -> Subscription | None:
     settings = settings or get_settings()
     if not settings.trial_enabled:
         return None
@@ -174,14 +182,14 @@ async def create_trial(db: AsyncSession, user: User, settings: Settings | None =
     if result.scalars().first():
         return None
 
-    ends = _now() + timedelta(days=settings.trial_duration_days)
+    ends = _now() + timedelta(days=duration_days or settings.trial_duration_days)
     sub = Subscription(
         user_id=user.id,
         status=SubscriptionStatus.trial,
         starts_at=_now(),
         ends_at=ends,
-        traffic_limit_gb=settings.trial_traffic_gb,
-        device_limit=settings.trial_device_limit,
+        traffic_limit_gb=settings.trial_traffic_gb if traffic_gb == -1 else traffic_gb,
+        device_limit=device_limit or settings.trial_device_limit,
     )
     db.add(sub)
     await db.flush()

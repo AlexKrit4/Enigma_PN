@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class PlanOut(BaseModel):
@@ -197,3 +197,31 @@ class StatsOut(BaseModel):
     revenue_today_rub: Decimal = Decimal("0")
     revenue_7d_rub: Decimal = Decimal("0")
     pending_orders: int = 0
+
+
+class SiteRegisterIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class SiteLoginIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class SiteOrderIn(BaseModel):
+    months: int = Field(ge=1, le=12)
+    extra_devices: int = Field(default=0, ge=0, le=45)
+
+
+class SiteDevicesOrderIn(BaseModel):
+    extra_devices: int = Field(ge=1, le=45)
+
+
+class SiteVerifyIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
+class SiteResendIn(BaseModel):
+    email: EmailStr

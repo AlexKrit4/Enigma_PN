@@ -1,0 +1,417 @@
+/* Scoped to the customer website; the Telegram app and admin keep their UI. */
+.website {
+  --site-paper: #f7f5ef;
+  --site-white: #fffefa;
+  --site-ink: #252622;
+  --site-muted: #696b61;
+  --site-line: #d9dbd0;
+  --site-orange: #f35734;
+  --site-green: #256347;
+  --font-display: "Golos Text", sans-serif;
+  --font-sans: "Golos Text", sans-serif;
+  min-height: 100dvh;
+  color: var(--site-ink);
+  background: var(--site-paper);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+}
+.website ::selection { background: #f7b5a5; color: var(--site-ink); }
+.website :where(h1, h2, h3, p) { margin: 0; }
+.website :where(h1, h2, h3) { font-weight: 600; line-height: 1.12; letter-spacing: -.04em; text-wrap: balance; }
+.website :where(a, button, input):focus-visible { outline: 2px solid var(--site-ink); outline-offset: 5px; }
+.website button { font-family: inherit; }
+.website button:disabled { cursor: not-allowed; opacity: .45; }
+.website svg { flex-shrink: 0; }
+.website .site-container { width: min(1240px, calc(100% - 80px)); margin-inline: auto; }
+.website .site-eyebrow { display: flex; align-items: center; gap: 10px; font: 11px/1.5 "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.website .site-eyebrow::before { content: ""; width: 8px; height: 8px; background: var(--site-orange); }
+.website .site-muted { color: var(--site-muted); }
+.website .site-link { text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #999c8e; }
+.website .site-link:hover { text-decoration-color: var(--site-orange); }
+.website .site-btn { min-height: 50px; padding: 12px 22px; border: 1px solid transparent; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 14px; font-size: 14px; font-weight: 600; line-height: 1.4; cursor: pointer; transition: background .18s, color .18s, border-color .18s; }
+.website .site-btn--dark { background: var(--site-ink); color: var(--site-white); }
+.website .site-btn--dark:hover:not(:disabled) { background: #45473f; }
+.website .site-btn--orange { background: var(--site-orange); color: #252622; }
+.website .site-btn--orange:hover:not(:disabled) { background: #ff704e; }
+.website .site-btn--outline { background: transparent; border-color: var(--site-line); }
+.website .site-btn--outline:hover:not(:disabled) { border-color: var(--site-ink); background: #eeeede; }
+.website .site-btn--small { min-height: 40px; padding: 9px 15px; font-size: 13px; }
+.website .site-btn--full { width: 100%; }
+.website .site-skip { position: fixed; top: -100px; left: 20px; z-index: 100; background: var(--site-ink); color: white; padding: 12px; }
+.website .site-skip:focus { top: 12px; }
+.website .site-header { position: sticky; top: 0; z-index: 30; background: var(--site-paper); border-bottom: 1px solid var(--site-line); }
+.website .header-inner { height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.website .site-brand { display: inline-flex; gap: 12px; align-items: center; font-size: 23px; font-weight: 700; letter-spacing: -.07em; white-space: nowrap; }
+.website .header-nav, .website .header-actions { display: flex; align-items: center; gap: 28px; font-size: 13px; font-weight: 500; }
+.website .header-nav a:hover, .website .header-login:hover { color: #b3391b; }
+.website .mobile-trigger { display: none; background: none; border: 0; padding: 10px; }
+.website .header-cta-short { display: none; }
+.site-menu-overlay { position: fixed; inset: 0; z-index: 50; background: #25262299; }
+.website.site-menu { position: fixed; z-index: 51; inset: 0 0 auto; min-height: 0; max-height: 100dvh; overflow-y: auto; padding: 28px; box-shadow: 0 10px 60px #0002; }
+.website .menu-title { display: flex; justify-content: space-between; align-items: center; padding-bottom: 28px; border-bottom: 1px solid var(--site-line); }
+.website .menu-links { display: flex; flex-direction: column; gap: 22px; padding-block: 28px; font-size: 24px; font-weight: 500; }
+.website .icon-button { display: grid; place-items: center; border: 0; padding: 8px; background: transparent; cursor: pointer; }
+.website .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 60px; align-items: center; padding-top: 68px; padding-bottom: 68px; }
+.website .hero h1 { font-size: clamp(50px, 5.8vw, 82px); font-weight: 600; line-height: 1.03; letter-spacing: -.065em; margin-top: 25px; }
+.website .hero h1 span { display: block; color: #c64627; }
+.website .hero-description { max-width: 405px; margin-top: 28px; color: var(--site-muted); font-size: 16px; line-height: 1.75; }
+.website .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 32px; }
+.website .hero-note { margin-top: 16px; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--site-muted); }
+.website .connection-art { position: relative; background: var(--site-orange); padding: 24px; border-radius: 4px; color: var(--site-ink); }
+.website .art-caption { display: flex; justify-content: space-between; border-bottom: 1px solid #25262250; padding-bottom: 14px; font: 10px/1.4 "IBM Plex Mono", monospace; letter-spacing: .05em; }
+.website .art-globe { display: block; width: 100%; height: auto; margin: 6px 0; }
+.website .art-bottom { display: flex; justify-content: space-between; align-items: center; padding-top: 17px; border-top: 1px solid #25262250; gap: 16px; }
+.website .art-stamp { font: 20px "IBM Plex Mono", monospace; letter-spacing: -.12em; padding: 6px 7px; border: 1px solid #252622; white-space: nowrap; }
+.website .art-bottom p { font-size: 13px; line-height: 1.4; font-weight: 500; margin-right: auto; }
+.website .art-arrow { display: flex; align-items: center; font-size: 38px; line-height: 1; }
+.website .admin-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); margin-bottom: 28px; }
+.website .admin-stat { padding: 20px 16px; border: 1px solid var(--site-line); margin: -1px 0 0 -1px; display: flex; flex-direction: column; gap: 6px; }
+.website .admin-stat strong { font: 500 28px/1 "Golos Text", sans-serif; letter-spacing: -.04em; white-space: nowrap; }
+.website .admin-stat span { font-size: 11px; line-height: 1.4; color: var(--site-muted); }
+.website .funnel { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.website .funnel-row { display: grid; grid-template-columns: 190px 1fr 120px; gap: 14px; align-items: center; }
+.website .funnel-label { font-size: 13px; color: var(--site-muted); }
+.website .funnel-bar { height: 22px; border: 1px solid var(--site-line); background: var(--site-white); }
+.website .funnel-fill { height: 100%; background: var(--site-orange); }
+.website .funnel-value { font: 12px "IBM Plex Mono", monospace; text-align: right; white-space: nowrap; }
+.website .admin-chart { display: flex; align-items: flex-end; gap: 3px; height: 140px; border-bottom: 1px solid var(--site-line); }
+.website .admin-chart-bar { flex: 1; min-width: 4px; }
+.website .admin-chart-bar.is-filled { background: var(--site-orange); }
+.website .admin-chart-bar:not(.is-filled) { border-top: 1px solid var(--site-line); }
+.website .admin-tg { margin-left: 6px; color: var(--site-muted); vertical-align: -2px; }
+.website .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); }
+.website .fact { padding: 27px 28px; border-right: 1px solid var(--site-line); display: flex; gap: 18px; align-items: center; }
+.website .fact:first-child { padding-left: 0; }
+.website .fact:last-child { border-right: 0; }
+.website .fact strong { font: 500 42px/1 "Golos Text", sans-serif; letter-spacing: -.06em; white-space: nowrap; }
+.website .fact span { font-size: 12px; line-height: 1.5; color: var(--site-muted); }
+.website .site-section { padding-block: 100px; }
+.website .section-top { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: end; margin-bottom: 46px; }
+.website .section-top h2, .website .pricing-intro h2, .website .faq-intro h2 { font-size: clamp(32px, 3.5vw, 48px); line-height: 1.1; margin-top: 18px; }
+.website .section-top > p { color: var(--site-muted); font-size: 15px; max-width: 420px; }
+.website .route-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.website .route { border: 1px solid var(--site-line); padding: 32px; background: var(--site-white); }
+.website .route + .route { border-left: 0; }
+.website .route--bypass { background: #e9ede1; }
+.website .route-title { display: flex; justify-content: space-between; align-items: center; }
+.website .route-title h3 { font-size: 22px; }
+.website .route-label { font: 10px "IBM Plex Mono", monospace; text-transform: uppercase; }
+.website .route-path { display: flex; align-items: center; gap: 0; margin-block: 32px; }
+.website .route-node { height: 54px; width: 54px; border: 1px solid var(--site-ink); display: grid; place-items: center; border-radius: 50%; }
+.website .route-node--accent { background: var(--site-ink); color: var(--site-white); }
+.website .route-line { height: 1px; flex: 1; border-top: 1px dashed #9ca28e; position: relative; }
+.website .route-line::after { content: ""; width: 6px; height: 6px; position: absolute; right: 2px; top: -4px; border-top: 1px solid #9ca28e; border-right: 1px solid #9ca28e; transform: rotate(45deg); }
+.website .route p { font-size: 14px; color: var(--site-muted); max-width: 430px; }
+.website .route-caveat { font-size: 12px; color: var(--site-muted); margin-top: 18px; display: flex; align-items: flex-start; gap: 8px; }
+.website .pricing-section { background: #ebede4; border-block: 1px solid var(--site-line); }
+.website .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; align-items: start; }
+.website .pricing-intro { padding-top: 24px; }
+.website .pricing-intro > p { margin-top: 22px; max-width: 380px; color: var(--site-muted); font-size: 15px; }
+.website .included-list { list-style: none; padding: 0; margin: 32px 0; }
+.website .included-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; font-size: 14px; border-bottom: 1px solid var(--site-line); }
+.website .included-list svg { color: var(--site-green); }
+.website .trial-note { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border: 1px solid #b8c0ab; max-width: 400px; }
+.website .trial-note strong { display: block; font-size: 14px; }
+.website .trial-note p { margin-top: 4px; font-size: 12px; color: var(--site-muted); }
+.website .price-calculator { padding: 32px; background: var(--site-white); border: 1px solid var(--site-ink); border-radius: 6px; box-shadow: 6px 6px 0 #d2d7c7; }
+.website .calculator-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; border-bottom: 1px solid var(--site-line); gap: 20px; }
+.website .calculator-heading h3 { font-size: 22px; margin-top: 8px; }
+.website .calculator-heading > svg { width: 36px; height: 36px; color: var(--site-orange); }
+.website .calculator-field { margin-top: 25px; }
+.website .field-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 12px; font-weight: 500; gap: 10px; }
+.website .discount-badge { background: #e7eddc; padding: 3px 8px; font-size: 10px; font-weight: 600; color: #3e5b2b; border-radius: 2px; }
+.website .period-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.website .period-option { border: 1px solid var(--site-line); background: transparent; padding: 12px 2px; border-radius: 3px; cursor: pointer; color: var(--site-ink); transition: border-color .18s, background .18s; }
+.website .period-option strong { display: block; font-size: 12px; font-weight: 500; }
+.website .period-option span { display: block; margin-top: 5px; font-size: 11px; color: var(--site-muted); }
+.website .period-option:hover { border-color: var(--site-ink); }
+.website .period-option[aria-pressed="true"] { background: var(--site-ink); border-color: var(--site-ink); color: var(--site-white); }
+.website .period-option[aria-pressed="true"] span { color: #c9ccbf; }
+.website .device-selector { display: flex; align-items: center; border: 1px solid var(--site-line); padding: 7px; border-radius: 3px; }
+.website .device-value { text-align: center; flex: 1; font-size: 15px; font-weight: 500; }
+.website .device-value small { display: block; margin-top: 2px; font-size: 10px; color: var(--site-muted); font-weight: 400; }
+.website .site-stepper { border: 0; border-radius: 3px; background: #eeefe8; height: 38px; width: 38px; display: grid; place-items: center; font-size: 22px; cursor: pointer; }
+.website .site-stepper:hover:not(:disabled) { background: #dcded2; }
+.website .calculator-help { font-size: 11px; color: var(--site-muted); margin-top: 9px; }
+.website .price-breakdown { margin-top: 25px; padding-top: 18px; border-top: 1px dashed var(--site-line); font-size: 12px; color: var(--site-muted); }
+.website .price-breakdown > div { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+.website .price-total { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 18px 0 24px; }
+.website .price-total > span { font-size: 13px; }
+.website .price-total strong { font-size: 42px; font-weight: 500; line-height: 1; letter-spacing: -.06em; }
+.website .price-total small { display: block; font-size: 11px; color: var(--site-muted); text-align: right; margin-top: 6px; }
+.website .calculator-note { text-align: center; font-size: 10px; margin-top: 12px; color: var(--site-muted); }
+.website .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+.website .step-number { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; border-bottom: 1px solid var(--site-line); font: 12px "IBM Plex Mono", monospace; color: var(--site-muted); }
+.website .steps-grid h3 { font-size: 21px; margin-top: 24px; }
+.website .steps-grid p { margin-top: 12px; font-size: 14px; color: var(--site-muted); max-width: 310px; }
+.website .platform-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 28px; border-top: 1px solid var(--site-line); padding-top: 28px; margin-top: 52px; }
+.website .platform-strip > span { color: var(--site-muted); font-size: 12px; margin-right: auto; }
+.website .platform-strip > div { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.website .faq-section { border-top: 1px solid var(--site-line); }
+.website .faq-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 80px; }
+.website .faq-intro > p { font-size: 14px; margin-top: 22px; color: var(--site-muted); }
+.website .site-accordion-item { border-bottom: 1px solid var(--site-line); }
+.website .site-accordion-trigger { width: 100%; background: none; border: 0; padding: 22px 0; display: flex; gap: 24px; align-items: center; justify-content: space-between; text-align: left; cursor: pointer; font-size: 16px; font-weight: 500; color: var(--site-ink); }
+.website .site-accordion-trigger svg { transition: transform .2s; }
+.website .site-accordion-trigger[data-state="open"] svg { transform: rotate(45deg); }
+.website .site-accordion-content { overflow: hidden; }
+.website .site-accordion-content[data-state="open"] { animation: site-accordion-open .22s ease-out; }
+.website .site-accordion-body { padding: 0 32px 24px 0; color: var(--site-muted); font-size: 14px; line-height: 1.75; }
+.website .final-cta { display: flex; justify-content: space-between; align-items: center; padding: 48px; background: var(--site-orange); border-radius: 4px; gap: 30px; margin-bottom: 80px; }
+.website .final-cta h2 { font-size: 38px; }
+.website .final-cta p { font-size: 13px; margin-top: 10px; }
+.website .site-footer { border-top: 1px solid var(--site-line); padding-block: 44px 24px; }
+.website .footer-main { display: flex; justify-content: space-between; gap: 36px; }
+.website .footer-main p { font-size: 12px; margin-top: 14px; color: var(--site-muted); }
+.website .footer-links { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; padding-top: 5px; font-size: 12px; }
+.website .footer-links a { display: flex; gap: 6px; align-items: center; }
+.website .footer-links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.website .footer-bottom { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--site-line); color: var(--site-muted); font: 10px "IBM Plex Mono", monospace; }
+.website .auth-layout { display: grid; grid-template-columns: 1fr 1fr; width: min(1050px, calc(100% - 80px)); margin: 60px auto; border: 1px solid var(--site-line); background: var(--site-white); border-radius: 5px; overflow: hidden; }
+.website .auth-aside { background: #e9ede1; padding: 40px; display: flex; flex-direction: column; justify-content: space-between; }
+.website .auth-aside h2 { font-size: 36px; margin-top: 20px; }
+.website .auth-aside > p { color: var(--site-muted); font-size: 13px; }
+.website .connection-art--compact { margin-top: 30px; padding: 18px; }
+.website .connection-art--compact .art-bottom { display: none; }
+.website .auth-content { display: flex; align-items: center; padding: 48px; }
+.website .auth-form { width: 100%; }
+.website .auth-step { display: flex; gap: 6px; margin-bottom: 26px; }
+.website .auth-step span { height: 3px; width: 30px; background: var(--site-line); }
+.website .auth-step span.is-current { background: var(--site-orange); }
+.website .auth-form h1 { font-size: 32px; }
+.website .auth-description { font-size: 13px; color: var(--site-muted); margin-top: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.website .site-label { display: block; font-size: 12px; font-weight: 500; margin-top: 24px; }
+.website .site-input { margin-top: 9px; display: block; width: 100%; border: 1px solid #bdc2b1; border-radius: 3px; padding: 13px 14px; min-height: 50px; background: var(--site-white); color: var(--site-ink); font: 14px "Golos Text", sans-serif; transition: border-color .15s; }
+.website .site-input::placeholder { color: #8b8e82; }
+.website .site-input:focus { outline: 2px solid #252622; outline-offset: -1px; }
+.website .password-field { position: relative; }
+.website .password-field .site-input { padding-right: 52px; }
+.website .password-toggle { position: absolute; right: 8px; top: 7px; height: 36px; width: 36px; }
+.website .form-submit { margin-top: 26px; }
+.website .auth-switch { font-size: 12px; text-align: center; margin-top: 22px; color: var(--site-muted); }
+.website .auth-legal { font-size: 10px; line-height: 1.65; text-align: center; color: var(--site-muted); margin-top: 16px; }
+.website .code-input { font: 28px "IBM Plex Mono", monospace; letter-spacing: .35em; text-align: center; }
+.website .site-alert { padding: 14px 16px; border: 1px solid #e5ad99; border-radius: 3px; font-size: 13px; color: #8b321d; background: #fff0e9; margin-top: 20px; overflow-wrap: anywhere; }
+.website .site-alert--success { border-color: #b9cbb0; background: #edf3e7; color: #36572e; }
+.website .loading-state { padding: 100px 24px; text-align: center; color: var(--site-muted); font-size: 14px; }
+.website .page-heading { padding-block: 52px 36px; }
+.website .page-heading h1 { font-size: 46px; margin-top: 16px; }
+.website .page-heading p { max-width: 620px; margin-top: 20px; font-size: 15px; color: var(--site-muted); }
+.website .dashboard-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.website .dashboard-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.website .dashboard-top .account-email { font-size: 13px; margin-top: 14px; color: var(--site-muted); overflow-wrap: anywhere; }
+.website .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr); gap: 28px; padding-bottom: 64px; }
+.website .site-alert + .dashboard-grid { margin-top: 24px; }
+.website .dashboard-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.website .site-panel { padding: 28px; border: 1px solid var(--site-line); background: var(--site-white); border-radius: 4px; }
+.website .site-panel h2 { font-size: 23px; }
+.website .site-panel-description { font-size: 13px; margin-top: 10px; color: var(--site-muted); }
+.website .subscription-panel { background: #e9ede1; border-color: #bac2ac; }
+.website .subscription-heading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+.website .subscription-heading h2 { margin-top: 18px; max-width: 360px; font-size: 27px; }
+.website .site-badge { display: inline-flex; gap: 7px; align-items: center; border: 1px solid #9eae92; padding: 4px 8px; font: 10px "IBM Plex Mono", monospace; color: #305430; background: #f2f6ec; }
+.website .site-badge::before { content: ""; width: 5px; height: 5px; background: currentColor; border-radius: 50%; }
+.website .subscription-expiry { font-size: 12px; }
+.website .subscription-expiry span { display: block; color: var(--site-muted); font-size: 10px; margin-bottom: 4px; }
+.website .subscription-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 28px; border-block: 1px solid #bac2ac; padding-block: 22px; }
+.website .subscription-stats > div { padding: 0 18px; border-right: 1px solid #bac2ac; }
+.website .subscription-stats > div:first-child { padding-left: 0; }
+.website .subscription-stats > div:last-child { border: 0; }
+.website .subscription-stats dt { font-size: 10px; color: var(--site-muted); }
+.website .subscription-stats dd { font-size: 27px; letter-spacing: -.05em; margin: 6px 0 0; font-weight: 500; }
+.website .connect-area { padding-top: 24px; }
+.website .connect-area h3 { font-size: 17px; }
+.website .connect-area p { font-size: 12px; margin-top: 8px; color: var(--site-muted); }
+.website .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.website .panel-bottom { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #bac2ac; font-size: 12px; }
+.website .devices-buy { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 22px; }
+.website .devices-buy .device-selector { min-width: 210px; flex: 1; }
+.website .devices-price { font-size: 23px; font-weight: 500; letter-spacing: -.04em; }
+.website .device-list, .website .order-list { list-style: none; padding: 0; margin: 20px 0 0; }
+.website .device-list li, .website .order-list li { padding: 17px 0; border-top: 1px solid var(--site-line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.website .device-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.website .device-info strong, .website .order-list strong { display: block; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.website .device-info small, .website .order-list small { display: block; color: var(--site-muted); font-size: 10px; margin-top: 4px; }
+.website .device-icon { background: #eeefe8; width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; }
+.website .order-info { min-width: 0; }
+.website .order-amount { font-size: 13px; font-weight: 500; text-align: right; white-space: nowrap; }
+.website .order-paid { display: block; font-size: 10px; color: var(--site-green); margin-top: 4px; font-weight: 400; }
+.website .support-panel { border-color: transparent; background: var(--site-ink); color: var(--site-white); }
+.website .support-panel p { color: #c9ccbf; }
+.website .support-panel .site-btn { background: var(--site-white); color: var(--site-ink); }
+.website .payment-layout { min-height: 65vh; padding: 72px 24px; display: flex; justify-content: center; align-items: center; }
+.website .payment-panel { width: 100%; max-width: 480px; padding: 40px; background: var(--site-white); border: 1px solid var(--site-line); border-radius: 5px; }
+.website .payment-icon { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--site-line); border-radius: 50%; margin-bottom: 28px; }
+.website .payment-icon--success { background: #e7eddc; color: var(--site-green); }
+.website .payment-panel h1 { font-size: 40px; margin-top: 14px; }
+.website .payment-panel > p { font-size: 13px; line-height: 1.75; color: var(--site-muted); margin-top: 16px; }
+.website .payment-poll { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 22px; font: 10px "IBM Plex Mono", monospace; color: var(--site-muted); }
+.website .payment-back { display: block; margin-top: 24px; text-align: center; font-size: 12px; }
+.website .status-dot { height: 6px; width: 6px; border-radius: 50%; background: var(--site-orange); animation: site-pulse 1.8s ease-in-out infinite; }
+.website .guide-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; padding-bottom: 72px; }
+.website .guide-sidebar { display: flex; flex-direction: column; gap: 20px; }
+.website .platform-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--site-line); gap: 4px; margin-bottom: 28px; }
+.website .platform-tab { padding: 14px 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; }
+.website .platform-tab[data-state="active"] { border-color: var(--site-orange); font-weight: 600; }
+.website .platform-tab:hover { background: #e9ede1; }
+.website .guide-steps { list-style: none; padding: 0; margin: 0; }
+.website .guide-steps li { display: flex; gap: 22px; border-bottom: 1px solid var(--site-line); padding: 24px 0; font-size: 14px; }
+.website .guide-step-no { font: 14px "IBM Plex Mono", monospace; color: #af3b21; padding-top: 2px; }
+.website .guide-download { margin-top: 30px; }
+.website .guide-sidebar h2 { font-size: 19px; }
+.website .server-choice { margin-top: 22px; }
+.website .server-choice strong { font-size: 13px; display: block; }
+.website .server-choice p { color: var(--site-muted); font-size: 12px; margin-top: 6px; }
+.website .troubleshoot-list { padding-left: 16px; margin-top: 20px; color: var(--site-muted); font-size: 12px; }
+.website .troubleshoot-list li { margin-top: 12px; }
+.website .legal-layout { display: grid; grid-template-columns: 230px minmax(0, 730px); gap: 70px; padding-block: 55px 90px; }
+.website .legal-nav { display: flex; flex-direction: column; gap: 18px; font-size: 13px; align-self: start; position: sticky; top: 125px; }
+.website .legal-document h1 { font-size: 44px; }
+.website .legal-document h2 { font-size: 32px; margin-top: 60px; padding-top: 30px; border-top: 1px solid var(--site-line); }
+.website .legal-document > p { margin-top: 18px; font-size: 12px; color: var(--site-muted); }
+.website .legal-copy { margin-top: 32px; }
+.website .legal-copy p { font-size: 14px; line-height: 1.9; margin-top: 22px; color: #55594e; }
+.website #price, .website #buy, .website #privacy, .website #offer { scroll-margin-top: 110px; }
+@keyframes site-accordion-open { from { height: 0; } to { height: var(--radix-accordion-content-height); } }
+@keyframes site-pulse { 50% { opacity: .25; } }
+@media (min-width: 1500px) { .website .hero h1 { font-size: 88px; } }
+@media (max-width: 1100px) {
+  .website .hero { gap: 35px; }
+  .website .hero h1 { font-size: 64px; }
+  .website .header-nav { gap: 20px; }
+  .website .fact { gap: 14px; padding-inline: 20px; }
+  .website .fact strong { font-size: 34px; }
+  .website .pricing-grid { gap: 50px; }
+  .website .price-calculator { padding: 25px; }
+  .website .faq-grid { gap: 40px; }
+  .website .auth-aside, .website .auth-content { padding: 32px; }
+  .website .dashboard-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; }
+  .website .site-panel { padding: 24px; }
+  .website .guide-grid { grid-template-columns: minmax(0, 1fr) 260px; gap: 28px; }
+}
+@media (max-width: 850px) {
+  .website .site-container { width: calc(100% - 40px); }
+  .website .header-inner { height: 74px; }
+  .website .header-nav { display: none; }
+  .website .header-actions { gap: 16px; }
+  .website .mobile-trigger { display: block; }
+  .website .hero { padding-top: 50px; gap: 25px; }
+  .website .hero h1 { font-size: 50px; }
+  .website .hero-description { font-size: 14px; }
+  .website .art-caption { font-size: 8px; }
+  .website .connection-art { padding: 16px; }
+  .website .art-stamp { font-size: 15px; }
+  .website .art-bottom p { font-size: 11px; }
+  .website .fact { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .website .fact span br { display: none; }
+  .website .admin-stat { padding: 16px 12px; }
+  .website .admin-stat strong { font-size: 24px; }
+  .website .funnel-row { grid-template-columns: 140px 1fr 100px; gap: 10px; }
+  .website .site-section { padding-block: 70px; }
+  .website .pricing-grid { gap: 32px; }
+  .website .price-calculator { padding: 20px; }
+  .website .calculator-heading h3 { font-size: 19px; }
+  .website .calculator-heading > svg { display: none; }
+  .website .route { padding: 24px; }
+  .website .section-top { gap: 30px; }
+  .website .steps-grid { gap: 24px; }
+  .website .final-cta { padding: 32px; }
+  .website .final-cta h2 { font-size: 30px; }
+  .website .footer-main { flex-direction: column; }
+  .website .auth-layout { width: calc(100% - 40px); }
+  .website .auth-aside h2 { font-size: 28px; }
+  .website .auth-aside, .website .auth-content { padding: 26px; }
+  .website .dashboard-grid, .website .guide-grid { grid-template-columns: 1fr; }
+  .website .guide-sidebar { display: grid; grid-template-columns: 1fr 1fr; }
+  .website .legal-layout { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .website .legal-nav { position: static; flex-direction: row; flex-wrap: wrap; border-bottom: 1px solid var(--site-line); padding-bottom: 20px; }
+}
+@media (max-width: 640px) {
+  .website .site-container { width: calc(100% - 36px); }
+  .website .site-brand { font-size: 20px; gap: 8px; }
+  .website .site-brand svg { width: 27px; height: 27px; }
+  .website .header-inner { height: 68px; gap: 10px; }
+  .website .header-actions { gap: 6px; }
+  .website .header-login { display: none; }
+  .website .header-actions > .site-btn { font-size: 11px; min-height: 36px; padding: 8px 10px; }
+  .website .mobile-trigger { padding: 8px 0 8px 8px; }
+  .website .hero { grid-template-columns: 1fr; padding-block: 36px 30px; gap: 32px; }
+  .website .hero h1 { font-size: clamp(48px, 12vw, 68px); margin-top: 20px; }
+  .website .hero-description { max-width: 400px; margin-top: 22px; }
+  .website .hero-actions { margin-top: 24px; gap: 16px; }
+  .website .hero-note { font-size: 10px; }
+  .website .connection-art { padding: 18px; max-width: 440px; width: 100%; margin-inline: auto; }
+  .website .art-globe { max-height: 310px; }
+  .website .art-caption { font-size: 9px; }
+  .website .art-bottom p { font-size: 12px; }
+  .website .facts { grid-template-columns: 1fr 1fr; }
+  .website .funnel-row { grid-template-columns: 1fr; gap: 6px; }
+  .website .funnel-value { text-align: left; }
+  .website .fact { flex-direction: row; align-items: center; gap: 16px; padding: 20px 14px; }
+  .website .fact:first-child { padding-left: 14px; }
+  .website .fact:nth-child(2) { border-right: 0; }
+  .website .fact:nth-child(-n+2) { border-bottom: 1px solid var(--site-line); }
+  .website .fact strong { font-size: 30px; }
+  .website .fact span { font-size: 10px; }
+  .website .site-section { padding-block: 54px; }
+  .website .section-top, .website .pricing-grid, .website .faq-grid { grid-template-columns: 1fr; gap: 24px; }
+  .website .section-top { margin-bottom: 30px; }
+  .website .section-top h2, .website .pricing-intro h2, .website .faq-intro h2 { font-size: 34px; }
+  .website .route-grid { grid-template-columns: 1fr; }
+  .website .route + .route { border-left: 1px solid var(--site-line); border-top: 0; }
+  .website .route { padding: 24px; }
+  .website .route-path { margin-block: 24px; }
+  .website .pricing-intro { padding-top: 0; }
+  .website .trial-note { max-width: none; }
+  .website .price-calculator { padding: 24px 20px; margin-right: 5px; }
+  .website .calculator-heading > svg { display: block; }
+  .website .steps-grid { grid-template-columns: 1fr; gap: 32px; }
+  .website .steps-grid h3 { margin-top: 16px; }
+  .website .steps-grid p { max-width: none; }
+  .website .platform-strip { gap: 22px; margin-top: 36px; }
+  .website .platform-strip > span { width: 100%; }
+  .website .site-accordion-trigger { font-size: 15px; }
+  .website .final-cta { flex-direction: column; align-items: flex-start; padding: 28px; margin-bottom: 48px; }
+  .website .final-cta h2 { font-size: 30px; }
+  .website .final-cta .site-btn { width: 100%; }
+  .website .footer-links { flex-direction: column; gap: 16px; }
+  .website .footer-bottom { font-size: 9px; gap: 20px; }
+  .website .auth-layout { grid-template-columns: 1fr; width: calc(100% - 36px); margin-block: 30px; }
+  .website .auth-aside { padding: 24px; }
+  .website .auth-aside h2 { font-size: 26px; margin-top: 12px; }
+  .website .auth-aside .connection-art { display: none; }
+  .website .auth-content { padding: 30px 24px; }
+  .website .auth-form h1 { font-size: 28px; }
+  .website .auth-step { margin-bottom: 20px; }
+  .website .page-heading { padding-block: 36px 28px; }
+  .website .page-heading h1 { font-size: 36px; }
+  .website .dashboard-top { gap: 12px; flex-wrap: wrap; }
+  .website .dashboard-top > .site-btn { padding: 9px 10px; }
+  .website .site-panel { padding: 22px 20px; }
+  .website .subscription-heading h2 { font-size: 25px; }
+  .website .subscription-stats > div { padding-inline: 12px; }
+  .website .subscription-stats dd { font-size: 25px; }
+  .website .device-list li { gap: 10px; }
+  .website .device-list .site-btn { padding: 8px; font-size: 11px; }
+  .website .payment-layout { padding: 36px 18px; }
+  .website .payment-panel { padding: 28px 24px; }
+  .website .guide-sidebar { display: flex; }
+  .website .platform-tab { padding: 12px 9px; font-size: 11px; gap: 5px; }
+  .website .guide-steps li { gap: 16px; font-size: 13px; }
+  .website .legal-layout { padding-block: 30px 55px; }
+  .website .legal-document h1 { font-size: 35px; }
+}
+@media (max-width: 360px) {
+  .website .site-brand { font-size: 18px; }
+  .website .header-actions > .site-btn { gap: 8px; font-size: 10px; }
+  .website .header-cta-label { display: none; }
+  .website .header-cta-short { display: inline; }
+  .website .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .website .fact { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .website .page-heading h1 { font-size: 30px; }
+  .website .legal-document h2 { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .website *, .website *::before, .website *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

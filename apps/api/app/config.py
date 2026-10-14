@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     yoomoney_wallet: str = ""
     yoomoney_notification_secret: str = ""
 
+    # SMTP для писем с кодом подтверждения регистрации на сайте
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = False
+
     trial_enabled: bool = True
     trial_duration_days: int = 1
     trial_traffic_gb: int = 5

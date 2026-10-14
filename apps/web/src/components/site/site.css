@@ -64,7 +64,7 @@
 .website .art-bottom { display: flex; justify-content: space-between; align-items: center; padding-top: 17px; border-top: 1px solid #25262250; gap: 16px; }
 .website .art-stamp { font: 20px "IBM Plex Mono", monospace; letter-spacing: -.12em; padding: 6px 7px; border: 1px solid #252622; white-space: nowrap; }
 .website .art-bottom p { font-size: 13px; line-height: 1.4; font-weight: 500; margin-right: auto; }
-.website .art-arrow { font-size: 38px; line-height: 1; }
+.website .art-arrow { display: flex; align-items: center; font-size: 38px; line-height: 1; }
 .website .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); }
 .website .fact { padding: 27px 28px; border-right: 1px solid var(--site-line); display: flex; gap: 18px; align-items: center; }
 .website .fact:first-child { padding-left: 0; }

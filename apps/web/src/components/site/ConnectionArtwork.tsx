@@ -1,5 +1,3 @@
-import { ArrowUpRight } from "@phosphor-icons/react";
-
 export default function ConnectionArtwork({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`connection-art${compact ? " connection-art--compact" : ""}`} role="img" aria-label="Схема: ваше устройство подключается к интернету через VPN">
@@ -30,7 +28,7 @@ export default function ConnectionArtwork({ compact = false }: { compact?: boole
         <path d="m406 329 12-12 12 12-12 12z" fill="#252622" />
         <path d="M35 60h22M46 49v22" stroke="currentColor" strokeWidth="1.5" />
       </svg>
-      <div className="art-bottom"><span className="art-stamp">E / PN</span><p>Меньше ограничений.<br />Больше возможностей.</p><span className="art-arrow" aria-hidden="true"><ArrowUpRight size={40} /></span></div>
+      <div className="art-bottom"><span className="art-stamp">E / PN</span><p>Меньше ограничений.<br />Больше возможностей.</p><span className="art-arrow" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 256 256" fill="currentColor"><path d="M200 64v104a8 8 0 0 1-16 0V83.31L75.31 192a8 8 0 0 1-11.32-11.32L172.69 72H88a8 8 0 0 1 0-16h104a8 8 0 0 1 8 8Z" /></svg></span></div>
     </div>
   );
 }

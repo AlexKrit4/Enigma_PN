@@ -32,7 +32,37 @@ export type Me = {
   id: string;
   email: string;
   created_at?: string | null;
+  is_admin?: boolean;
   subscription: Subscription | null;
+};
+
+export type AdminOverview = {
+  users_site: number;
+  users_verified: number;
+  subscriptions_active: number;
+  orders_paid: number;
+  revenue_rub: string;
+  orders_pending: number;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  created_at?: string | null;
+  email_verified: boolean;
+  is_admin: boolean;
+  subscription: { status: string; ends_at: string; days_left: number; device_limit: number } | null;
+};
+
+export type AdminPayment = {
+  id: string;
+  email: string | null;
+  amount: string;
+  currency: string;
+  title?: string | null;
+  provider: string;
+  created_at?: string | null;
+  paid_at?: string | null;
 };
 
 export type Session = { access_token: string; user: Me };
@@ -150,6 +180,9 @@ export const siteApi = {
   orders: () => request<Order[]>("/api/v1/site/orders"),
   order: (id: string) => request<Order>(`/api/v1/site/orders/${id}`),
   kickDevice: (id: string) => request<unknown>(`/api/v1/me/devices/${id}`, { method: "DELETE" }),
+  adminOverview: () => request<AdminOverview>("/api/v1/site/admin/overview"),
+  adminUsers: () => request<AdminUser[]>("/api/v1/site/admin/users"),
+  adminPayments: () => request<AdminPayment[]>("/api/v1/site/admin/payments"),
 };
 
 export function formatRub(value: number | string): string {

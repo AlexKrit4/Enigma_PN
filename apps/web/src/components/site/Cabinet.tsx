@@ -119,7 +119,10 @@ export default function Cabinet() {
           <h1>Ваше подключение.</h1>
           <div className="account-email">{me.email}</div>
         </div>
-        <button onClick={logout} className="site-btn site-btn--outline site-btn--small">Выйти <SignOut size={16} aria-hidden /></button>
+        <div className="dashboard-actions">
+          {me.is_admin && <Link href="/panel" className="site-btn site-btn--outline site-btn--small">Панель</Link>}
+          <button onClick={logout} className="site-btn site-btn--outline site-btn--small">Выйти <SignOut size={16} aria-hidden /></button>
+        </div>
       </div>
       {notice && <div className="site-alert site-alert--success" role="status">{notice}</div>}
       {error && <div className="site-alert" role="alert">{error}</div>}

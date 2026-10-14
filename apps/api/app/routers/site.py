@@ -8,14 +8,14 @@ from uuid import UUID
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.deps import create_access_token, get_current_user
-from app.models.entities import Order, OrderStatus, Plan, User
+from app.deps import create_access_token, get_current_user, require_admin
+from app.models.entities import Order, OrderStatus, Plan, Subscription, SubscriptionStatus, User
 from app.schemas import (
     SiteDevicesOrderIn,
     SiteLoginIn,
@@ -136,6 +136,7 @@ async def _me_payload(db: AsyncSession, user: User, settings: Settings) -> dict:
         "id": str(user.id),
         "email": user.email,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "is_admin": bool(user.is_admin),
         "subscription": await serialize_subscription_with_devices(
             db, sub, settings, include_devices=True
         ),
@@ -394,3 +395,119 @@ async def site_order_status(
         )
         payment_url = redirect.payment_url
     return _order_payload(order, payment_url)
+
+
+# ── Hidden site admin (is_admin flag, same site JWT) ──────────────────────────
+
+@router.get("/admin/overview")
+async def site_admin_overview(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    site_users = await db.scalar(select(func.count(User.id)).where(User.email.isnot(None)))
+    verified = await db.scalar(
+        select(func.count(User.id)).where(User.email.isnot(None), User.email_verified.is_(True))
+    )
+    active_subs = await db.scalar(
+        select(func.count(Subscription.id)).where(
+            Subscription.status.in_([SubscriptionStatus.trial, SubscriptionStatus.active]),
+            Subscription.ends_at > now,
+        )
+    )
+    paid_count, paid_sum = (
+        await db.execute(
+            select(func.count(Order.id), func.coalesce(func.sum(Order.amount), 0)).where(
+                Order.status == OrderStatus.paid
+            )
+        )
+    ).one()
+    pending = await db.scalar(
+        select(func.count(Order.id)).where(Order.status == OrderStatus.pending)
+    )
+    return {
+        "users_site": site_users or 0,
+        "users_verified": verified or 0,
+        "subscriptions_active": active_subs or 0,
+        "orders_paid": paid_count or 0,
+        "revenue_rub": str(paid_sum or 0),
+        "orders_pending": pending or 0,
+    }
+
+
+@router.get("/admin/users")
+async def site_admin_users(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(User).where(User.email.isnot(None)).order_by(User.created_at.desc()).limit(500)
+    )
+    users = result.scalars().all()
+    if not users:
+        return []
+    sub_result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id.in_([u.id for u in users]),
+            Subscription.status.in_([SubscriptionStatus.trial, SubscriptionStatus.active]),
+            Subscription.ends_at > now,
+        )
+    )
+    subs: dict[UUID, Subscription] = {}
+    for s in sub_result.scalars():
+        if s.user_id not in subs or s.ends_at > subs[s.user_id].ends_at:
+            subs[s.user_id] = s
+    payload = []
+    for u in users:
+        s = subs.get(u.id)
+        payload.append(
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "email_verified": bool(u.email_verified),
+                "is_admin": bool(u.is_admin),
+                "subscription": (
+                    {
+                        "status": s.status.value,
+                        "ends_at": s.ends_at.isoformat(),
+                        "device_limit": s.device_limit,
+                        "days_left": max(0, ceil((s.ends_at - now).total_seconds() / 86400)),
+                    }
+                    if s
+                    else None
+                ),
+            }
+        )
+    return payload
+
+
+@router.get("/admin/payments")
+async def site_admin_payments(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    result = await db.execute(
+        select(Order, User.email)
+        .join(User, Order.user_id == User.id)
+        .where(Order.status == OrderStatus.paid)
+        .order_by(Order.paid_at.desc().nullslast(), Order.created_at.desc())
+        .limit(200)
+    )
+    payload = []
+    for order, email in result.all():
+        meta = order.meta or {}
+        payload.append(
+            {
+                "id": str(order.id),
+                "email": email,
+                "amount": str(order.amount),
+                "currency": order.currency,
+                "title": meta.get("title"),
+                "provider": order.payment_provider,
+                "created_at": order.created_at.isoformat() if order.created_at else None,
+                "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+            }
+        )
+    return payload

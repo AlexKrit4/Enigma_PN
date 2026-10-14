@@ -65,6 +65,12 @@
 .website .art-stamp { font: 20px "IBM Plex Mono", monospace; letter-spacing: -.12em; padding: 6px 7px; border: 1px solid #252622; white-space: nowrap; }
 .website .art-bottom p { font-size: 13px; line-height: 1.4; font-weight: 500; margin-right: auto; }
 .website .art-arrow { display: flex; align-items: center; font-size: 38px; line-height: 1; }
+.website .admin-stats { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); margin-bottom: 28px; }
+.website .admin-stat { padding: 22px 18px; border-right: 1px solid var(--site-line); display: flex; flex-direction: column; gap: 6px; }
+.website .admin-stat:first-child { padding-left: 0; }
+.website .admin-stat:last-child { border-right: 0; }
+.website .admin-stat strong { font: 500 30px/1 "Golos Text", sans-serif; letter-spacing: -.04em; white-space: nowrap; }
+.website .admin-stat span { font-size: 11px; line-height: 1.4; color: var(--site-muted); }
 .website .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--site-line); border-bottom: 1px solid var(--site-line); }
 .website .fact { padding: 27px 28px; border-right: 1px solid var(--site-line); display: flex; gap: 18px; align-items: center; }
 .website .fact:first-child { padding-left: 0; }
@@ -184,6 +190,7 @@
 .website .page-heading h1 { font-size: 46px; margin-top: 16px; }
 .website .page-heading p { max-width: 620px; margin-top: 20px; font-size: 15px; color: var(--site-muted); }
 .website .dashboard-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.website .dashboard-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .website .dashboard-top .account-email { font-size: 13px; margin-top: 14px; color: var(--site-muted); overflow-wrap: anywhere; }
 .website .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr); gap: 28px; padding-bottom: 64px; }
 .website .site-alert + .dashboard-grid { margin-top: 24px; }
@@ -289,6 +296,12 @@
   .website .art-bottom p { font-size: 11px; }
   .website .fact { flex-direction: column; align-items: flex-start; gap: 8px; }
   .website .fact span br { display: none; }
+  .website .admin-stats { grid-template-columns: repeat(3, 1fr); }
+  .website .admin-stat:nth-child(-n+3) { border-bottom: 1px solid var(--site-line); }
+  .website .admin-stat:nth-child(3n) { border-right: 0; }
+  .website .admin-stat { padding: 18px 14px; }
+  .website .admin-stat:first-child { padding-left: 14px; }
+  .website .admin-stat strong { font-size: 24px; }
   .website .site-section { padding-block: 70px; }
   .website .pricing-grid { gap: 32px; }
   .website .price-calculator { padding: 20px; }
@@ -327,6 +340,10 @@
   .website .art-caption { font-size: 9px; }
   .website .art-bottom p { font-size: 12px; }
   .website .facts { grid-template-columns: 1fr 1fr; }
+  .website .admin-stats { grid-template-columns: 1fr 1fr; }
+  .website .admin-stat:nth-child(3n) { border-right: 1px solid var(--site-line); }
+  .website .admin-stat:nth-child(2n) { border-right: 0; }
+  .website .admin-stat:nth-child(-n+4) { border-bottom: 1px solid var(--site-line); }
   .website .fact { flex-direction: row; align-items: center; gap: 16px; padding: 20px 14px; }
   .website .fact:first-child { padding-left: 14px; }
   .website .fact:nth-child(2) { border-right: 0; }

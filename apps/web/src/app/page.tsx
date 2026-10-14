@@ -25,10 +25,10 @@ export default function HomePage() {
           <ConnectionArtwork />
         </section>
         <div className="site-container facts">
-          <div className="fact"><strong>05</strong><span>устройств<br />в одной подписке</span></div>
-          <div className="fact"><strong>∞</strong><span>трафик<br />без ограничений</span></div>
-          <div className="fact"><strong>200 ₽</strong><span>стоимость<br />за один месяц</span></div>
-          <div className="fact"><strong>03</strong><span>дня бесплатно<br />для знакомства</span></div>
+          <div className="fact"><strong>05</strong><span>устройств <br />в одной подписке</span></div>
+          <div className="fact"><strong>∞</strong><span>трафик <br />без ограничений</span></div>
+          <div className="fact"><strong>200 ₽</strong><span>стоимость <br />за один месяц</span></div>
+          <div className="fact"><strong>03</strong><span>дня бесплатно <br />для знакомства</span></div>
         </div>
         <section className="site-container site-section">
           <div className="section-top">

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from app.services.devices import (
 from app.services.happ import (
     announce_header,
     build_happ_redirect_html,
+    build_expired_subscription_response,
     build_sub_status_text,
     build_sub_url,
     build_subscription_response,
@@ -70,6 +72,10 @@ async def subscription_proxy(
     sub = result.scalar_one_or_none()
     if not sub:
         raise HTTPException(status_code=404, detail="Subscription not found")
+    is_expired = sub.ends_at <= datetime.now(timezone.utc) or sub.status == SubscriptionStatus.expired
+    if is_expired:
+        body, headers = build_expired_subscription_response(sub, settings)
+        return Response(content=body, media_type="text/plain; charset=utf-8", headers=headers)
     if sub.status not in (SubscriptionStatus.trial, SubscriptionStatus.active):
         raise HTTPException(status_code=403, detail="Subscription inactive")
 

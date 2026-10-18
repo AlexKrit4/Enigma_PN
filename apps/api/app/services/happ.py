@@ -151,6 +151,39 @@ def enrich_links_for_happ(links: list[str]) -> list[str]:
     return links
 
 
+def build_expired_subscription_response(
+    subscription: Subscription,
+    settings: Settings | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Return a visible renewal marker instead of a dead/removed subscription."""
+    settings = settings or get_settings()
+    # RFC 6761 reserves .invalid for names that must never resolve.
+    link = (
+        "vless://00000000-0000-0000-0000-000000000000"
+        "@subscription-expired.invalid:443"
+        "?encryption=none&security=none&type=tcp#Продлите%20подписку"
+    )
+    status_text = "Подписка истекла · продлите подписку на сайте"
+    headers = {
+        "profile-title": profile_title_header(settings.happ_profile_title),
+        "subscription-userinfo": subscription_userinfo(
+            upload=0,
+            download=0,
+            total=0,
+            expire=datetime.now(timezone.utc),
+        ),
+        "profile-update-interval": "12",
+        "content-disposition": f'attachment; filename="{settings.brand_name}.txt"',
+        "announce": announce_header(status_text),
+        "sub-info-text": header_safe_text(status_text),
+        "sub-info-color": "red",
+        "subscription-always-hwid-enable": "0",
+    }
+    if settings.happ_provider_id:
+        headers["provider-id"] = settings.happ_provider_id
+    return links_to_subscription_body([link]), headers
+
+
 def build_subscription_response(
     subscription: Subscription,
     links: list[str],
